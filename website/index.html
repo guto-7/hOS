@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>hOS</title>
+  <meta
+    name="description"
+    content="hOS — Understand your blood work. On your device. Private."
+  />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="network-canvas" aria-hidden="true"></canvas>
+
+  <header class="hero" id="top">
+    <div class="hero__content">
+      <p class="eyebrow">Local-first bloodwork interpretation</p>
+      <h1 class="hero__title">hOS</h1>
+      <p class="hero__tagline">
+        Understand your blood work.<br />
+        On your device. Private.
+      </p>
+
+      <div class="hero__actions">
+        <a id="download-btn" class="download-btn" href="#">Download</a>
+        <a class="other-platforms" href="#downloads">Other platforms</a>
+      </div>
+
+      <p class="platforms">macOS · Windows · Linux</p>
+    </div>
+
+    <a class="scroll-hint" href="#about" aria-label="Scroll to About section">
+      <span></span>
+    </a>
+  </header>
+
+  <main>
+    <section class="about section" id="about">
+      <div class="section__heading">
+        <p class="section__label">About</p>
+        <h2>Built for private, on-device interpretation.</h2>
+      </div>
+
+      <div class="card-grid">
+        <article class="info-card">
+          <div class="icon icon--node" aria-hidden="true"></div>
+          <h3>On-Device AI</h3>
+          <p>
+            A fine-tuned 7B language model runs entirely on your machine via
+            llama.cpp. No internet required for interpretation. Your blood panel
+            is analysed locally with structured clinical reasoning.
+          </p>
+        </article>
+
+        <article class="info-card">
+          <div class="icon icon--network" aria-hidden="true"></div>
+          <h3>Interprets Your Panel</h3>
+          <p>
+            Upload a PDF from any pathology lab. hOS extracts your markers,
+            identifies patterns across clinical conditions, and generates a
+            structured analysis. Ask follow-up questions in chat.
+          </p>
+        </article>
+
+        <article class="info-card">
+          <div class="icon icon--shield" aria-hidden="true"></div>
+          <h3>Private by Design</h3>
+          <p>
+            Your health data never leaves your device. No cloud storage, no user
+            accounts, no telemetry. The only optional network request is an
+            anonymised literature search — and you control the toggle.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="downloads section" id="downloads">
+      <div class="section__heading">
+        <p class="section__label">Downloads</p>
+        <h2>Choose your platform.</h2>
+      </div>
+
+      <div class="download-list">
+        <a class="download-item" href="#" data-platform="mac">
+          <span>macOS</span>
+          <small>.dmg</small>
+        </a>
+        <a class="download-item" href="#" data-platform="windows">
+          <span>Windows</span>
+          <small>.msi / .exe</small>
+        </a>
+        <a class="download-item" href="#" data-platform="linux">
+          <span>Linux</span>
+          <small>.AppImage / .deb</small>
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <a href="#top">hOS</a>
+    <span>·</span>
+    <a href="https://github.com/" target="_blank" rel="noreferrer">GitHub</a>
+    <span>·</span>
+    <a href="#privacy">Privacy</a>
+  </footer>
+
+  <section class="privacy" id="privacy">
+    <div class="privacy__inner">
+      <h2>Privacy</h2>
+      <p>
+        hOS is designed to keep your health data on your device. This website
+        uses no analytics, no cookies, and no tracking.
+      </p>
+    </div>
+  </section>
+
+  <div class="faq-widget">
+    <button
+      class="faq-toggle"
+      id="faq-toggle"
+      type="button"
+      aria-expanded="false"
+      aria-controls="faq-panel"
+    >
+      Quick Help
+    </button>
+
+    <aside class="faq-panel" id="faq-panel" hidden>
+      <div class="faq-panel__header">
+        <div>
+          <p class="faq-panel__eyebrow">Quick answers</p>
+          <h3>Questions about hOS</h3>
+        </div>
+        <button class="faq-close" id="faq-close" type="button" aria-label="Close FAQ">
+          ×
+        </button>
+      </div>
+
+      <div class="faq-list">
+        <details class="faq-item">
+          <summary>Does hOS run locally?</summary>
+          <p>
+            Yes. hOS is designed to run on your device, with on-device analysis as the
+            default experience.
+          </p>
+        </details>
+
+        <details class="faq-item">
+          <summary>Does my bloodwork get uploaded to the cloud?</summary>
+          <p>
+            No. hOS is designed to keep your health data on your device. Optional
+            network features should always be user-controlled.
+          </p>
+        </details>
+
+        <details class="faq-item">
+          <summary>What files can I upload?</summary>
+          <p>
+            Bloodwork PDF reports from pathology labs. The app extracts markers and
+            structures them for interpretation.
+          </p>
+        </details>
+
+        <details class="faq-item">
+          <summary>Which platforms are supported?</summary>
+          <p>
+            hOS is intended for macOS, Windows, and Linux, depending on the builds you
+            publish.
+          </p>
+        </details>
+
+        <details class="faq-item">
+          <summary>Is hOS a replacement for a doctor?</summary>
+          <p>
+            No. hOS is an interpretation and education tool. It should not be used as a
+            substitute for professional medical advice.
+          </p>
+        </details>
+      </div>
+    </aside>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
