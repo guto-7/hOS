@@ -1,0 +1,32 @@
+.obsidian/
+.DS_Store
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+target/
+
+# Environment
+.env
+.env.*
+.venv/
+**/.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+~$*
+
+# Tauri generated
+**/src-tauri/gen/
+
+# Vite cache
+.vite/
+
+# Claude Code
+.claude/

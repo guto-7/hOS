@@ -1,0 +1,725 @@
+[
+  {
+    "id": "IGF-1",
+    "name": "IGF-1",
+    "category": "Growth Axis",
+    "aliases": ["IGF-1", "IGF1", "Insulin-like Growth Factor 1", "Somatomedin C"],
+    "unit": "ng/mL",
+    "unit_conversions": [{ "from": "nmol/L", "multiply": 7.65 }],
+    "ranges": {
+      "16-24": { "low": 182, "high": 780 },
+      "25-39": { "low": 114, "high": 492 },
+      "40-54": { "low": 90, "high": 360 },
+      "55+":   { "low": 71, "high": 290 }
+    }
+  },
+  {
+    "id": "GH",
+    "name": "Growth Hormone (GH)",
+    "category": "Growth Axis",
+    "aliases": ["GH", "Growth Hormone", "HGH", "Somatotropin"],
+    "unit": "µg/L",
+    "unit_conversions": [{ "from": "ng/mL", "multiply": 1 }],
+    "ranges": { "low": null, "high": 5.0 }
+  },
+
+  {
+    "id": "Na",
+    "name": "Sodium",
+    "category": "Electrolytes/Renal",
+    "aliases": ["Sodium", "Na", "Na+"],
+    "unit": "mmol/L",
+    "unit_conversions": [{ "from": "mEq/L", "multiply": 1 }],
+    "ranges": { "low": 136, "high": 145 },
+    "alert_thresholds": { "critical_low": 125, "critical_high": 155 }
+  },
+  {
+    "id": "K",
+    "name": "Potassium",
+    "category": "Electrolytes/Renal",
+    "aliases": ["Potassium", "K", "K+"],
+    "unit": "mmol/L",
+    "unit_conversions": [{ "from": "mEq/L", "multiply": 1 }],
+    "ranges": { "low": 3.5, "high": 5.0 },
+    "pregnancy_range": { "low": 3.3, "high": 4.7 },
+    "alert_thresholds": { "critical_low": 2.5, "critical_high": 6.0 }
+  },
+  {
+    "id": "Cl",
+    "name": "Chloride",
+    "category": "Electrolytes/Renal",
+    "aliases": ["Chloride", "Cl", "Cl-"],
+    "unit": "mmol/L",
+    "unit_conversions": [{ "from": "mEq/L", "multiply": 1 }],
+    "ranges": { "low": 98, "high": 106 }
+  },
+  {
+    "id": "HCO3",
+    "name": "Bicarbonate",
+    "category": "Electrolytes/Renal",
+    "aliases": ["Bicarbonate", "HCO3", "CO2", "Total CO2", "TCO2"],
+    "unit": "mmol/L",
+    "unit_conversions": [{ "from": "mEq/L", "multiply": 1 }],
+    "ranges": { "low": 23, "high": 28 },
+    "pregnancy_range": { "low": 20, "high": 28 },
+    "alert_thresholds": { "critical_low": 15, "critical_high": 45 }
+  },
+  {
+    "id": "BUN",
+    "name": "Urea (BUN)",
+    "category": "Electrolytes/Renal",
+    "aliases": ["Urea", "BUN", "Blood Urea Nitrogen"],
+    "unit": "mmol/L",
+    "unit_conversions": [{ "from": "mg/dL", "multiply": 0.357 }],
+    "ranges": { "low": 2.9, "high": 7.1 },
+    "pregnancy_range": { "low": 1.2, "high": 4.0 }
+  },
+  {
+    "id": "Cr",
+    "name": "Creatinine",
+    "category": "Electrolytes/Renal",
+    "aliases": ["Creatinine", "Cr", "Creat"],
+    "unit": "µmol/L",
+    "unit_conversions": [{ "from": "mg/dL", "multiply": 88.4 }],
+    "ranges": {
+      "male":   { "low": 62, "high": 115 },
+      "female": { "low": 44, "high": 97 }
+    },
+    "pregnancy_range": { "low": 30, "high": 70 }
+  },
+  {
+    "id": "eGFR",
+    "name": "eGFR",
+    "category": "Electrolytes/Renal",
+    "aliases": ["eGFR", "Estimated GFR", "Glomerular Filtration Rate"],
+    "unit": "mL/min/1.73m²",
+    "unit_conversions": [],
+    "ranges": { "low": 60, "high": null },
+    "calculated_from": ["Cr"],
+    "calculation": "CKD-EPI from creatinine, age, sex"
+  },
+  {
+    "id": "Ca",
+    "name": "Calcium",
+    "category": "Electrolytes/Renal",
+    "aliases": ["Calcium", "Ca", "Ca2+", "Total Calcium"],
+    "unit": "mmol/L",
+    "unit_conversions": [{ "from": "mg/dL", "multiply": 0.25 }],
+    "ranges": { "low": 2.15, "high": 2.55 },
+    "alert_thresholds": { "critical_low": 1.50, "critical_high": 3.00 }
+  },
+  {
+    "id": "AdjCa",
+    "name": "Adjusted Calcium",
+    "category": "Electrolytes/Renal",
+    "aliases": ["Adjusted Calcium", "Corrected Calcium", "Adj Ca"],
+    "unit": "mmol/L",
+    "unit_conversions": [{ "from": "mg/dL", "multiply": 0.25 }],
+    "ranges": { "low": 2.15, "high": 2.55 },
+    "calculated_from": ["Ca", "Alb"],
+    "calculation": "Adjusted Ca = measured Ca + 0.02 × (40 – albumin g/L)"
+  },
+  {
+    "id": "PO4",
+    "name": "Phosphate",
+    "category": "Electrolytes/Renal",
+    "aliases": ["Phosphate", "PO4", "Phosphorus", "Phos"],
+    "unit": "mmol/L",
+    "unit_conversions": [{ "from": "mg/dL", "multiply": 0.323 }],
+    "ranges": { "low": 0.97, "high": 1.45 },
+    "pregnancy_range": { "low": 0.75, "high": 1.40 },
+    "alert_thresholds": { "critical_low": 0.30, "critical_high": null }
+  },
+  {
+    "id": "Mg",
+    "name": "Magnesium",
+    "category": "Electrolytes/Renal",
+    "aliases": ["Magnesium", "Mg", "Mg2+"],
+    "unit": "mmol/L",
+    "unit_conversions": [{ "from": "mg/dL", "multiply": 0.4115 }],
+    "ranges": { "low": 0.66, "high": 1.07 },
+    "alert_thresholds": { "critical_low": 0.30, "critical_high": 2.50 }
+  },
+  {
+    "id": "UA",
+    "name": "Uric Acid",
+    "category": "Electrolytes/Renal",
+    "aliases": ["Uric Acid", "UA", "Urate"],
+    "unit": "mmol/L",
+    "unit_conversions": [{ "from": "mg/dL", "multiply": 0.0595 }],
+    "ranges": {
+      "male":   { "low": 0.24, "high": 0.51 },
+      "female": { "low": 0.16, "high": 0.43 }
+    },
+    "pregnancy_range": { "low": 0.12, "high": 0.35 }
+  },
+
+  {
+    "id": "TP",
+    "name": "Total Protein",
+    "category": "Liver Function",
+    "aliases": ["Total Protein", "TP", "Serum Protein"],
+    "unit": "g/L",
+    "unit_conversions": [{ "from": "g/dL", "multiply": 10 }],
+    "ranges": { "low": 55, "high": 90 },
+    "pregnancy_range": { "low": 58, "high": 72 }
+  },
+  {
+    "id": "Alb",
+    "name": "Albumin",
+    "category": "Liver Function",
+    "aliases": ["Albumin", "Alb"],
+    "unit": "g/L",
+    "unit_conversions": [{ "from": "g/dL", "multiply": 10 }],
+    "ranges": { "low": 35, "high": 55 },
+    "pregnancy_range": { "low": 30, "high": 40 }
+  },
+  {
+    "id": "Glob",
+    "name": "Globulin",
+    "category": "Liver Function",
+    "aliases": ["Globulin", "Glob"],
+    "unit": "g/L",
+    "unit_conversions": [{ "from": "g/dL", "multiply": 10 }],
+    "ranges": { "low": 20, "high": 35 },
+    "pregnancy_range": { "low": 21, "high": 41 }
+  },
+  {
+    "id": "ALP",
+    "name": "Alkaline Phosphatase (ALP)",
+    "category": "Liver Function",
+    "aliases": ["ALP", "Alkaline Phosphatase", "Alk Phos"],
+    "unit": "U/L",
+    "unit_conversions": [],
+    "ranges": { "low": 30, "high": 120 },
+    "pregnancy_range": { "low": 30, "high": 215 }
+  },
+  {
+    "id": "TBil",
+    "name": "Total Bilirubin",
+    "category": "Liver Function",
+    "aliases": ["Total Bilirubin", "Bilirubin", "TBil", "T.Bil"],
+    "unit": "µmol/L",
+    "unit_conversions": [{ "from": "mg/dL", "multiply": 17.1 }],
+    "ranges": { "low": 5, "high": 17 }
+  },
+  {
+    "id": "GGT",
+    "name": "Gamma GT (GGT)",
+    "category": "Liver Function",
+    "aliases": ["GGT", "Gamma GT", "Gamma-Glutamyl Transferase", "γ-GT"],
+    "unit": "U/L",
+    "unit_conversions": [],
+    "ranges": {
+      "male":   { "low": 9, "high": 50 },
+      "female": { "low": 8, "high": 40 }
+    },
+    "pregnancy_range": { "low": 5, "high": 30 }
+  },
+  {
+    "id": "AST",
+    "name": "AST",
+    "category": "Liver Function",
+    "aliases": ["AST", "Aspartate Aminotransferase", "SGOT", "GOT"],
+    "unit": "U/L",
+    "unit_conversions": [],
+    "ranges": { "low": 10, "high": 40 }
+  },
+  {
+    "id": "ALT",
+    "name": "ALT",
+    "category": "Liver Function",
+    "aliases": ["ALT", "Alanine Aminotransferase", "SGPT", "GPT"],
+    "unit": "U/L",
+    "unit_conversions": [],
+    "ranges": { "low": 10, "high": 40 }
+  },
+
+  {
+    "id": "TC",
+    "name": "Total Cholesterol",
+    "category": "Lipids",
+    "aliases": ["Total Cholesterol", "Cholesterol", "TC", "T.Chol"],
+    "unit": "mmol/L",
+    "unit_conversions": [{ "from": "mg/dL", "multiply": 0.0259 }],
+    "ranges": { "low": null, "high": 5.18 },
+    "tiers": {
+      "desirable":       { "low": null, "high": 5.18 },
+      "borderline_high": { "low": 5.18, "high": 6.19 },
+      "high":            { "low": 6.19, "high": null }
+    }
+  },
+  {
+    "id": "HDL",
+    "name": "HDL Cholesterol",
+    "category": "Lipids",
+    "aliases": ["HDL", "HDL Cholesterol", "HDL-C"],
+    "unit": "mmol/L",
+    "unit_conversions": [{ "from": "mg/dL", "multiply": 0.0259 }],
+    "ranges": {
+      "male":   { "low": 1.04, "high": null },
+      "female": { "low": 1.30, "high": null }
+    },
+    "tiers": {
+      "optimal": { "low": 1.55, "high": null }
+    }
+  },
+  {
+    "id": "LDL",
+    "name": "LDL Cholesterol",
+    "category": "Lipids",
+    "aliases": ["LDL", "LDL Cholesterol", "LDL-C"],
+    "unit": "mmol/L",
+    "unit_conversions": [{ "from": "mg/dL", "multiply": 0.0259 }],
+    "ranges": { "low": null, "high": 4.13 },
+    "tiers": {
+      "optimal":         { "low": null, "high": 2.59 },
+      "near_optimal":    { "low": 2.59, "high": 3.34 },
+      "borderline_high": { "low": 3.34, "high": 4.13 },
+      "high":            { "low": 4.13, "high": 4.90 },
+      "very_high":       { "low": 4.90, "high": null }
+    }
+  },
+  {
+    "id": "NonHDL",
+    "name": "Non-HDL Cholesterol",
+    "category": "Lipids",
+    "aliases": ["Non-HDL", "Non-HDL Cholesterol"],
+    "unit": "mmol/L",
+    "unit_conversions": [{ "from": "mg/dL", "multiply": 0.0259 }],
+    "ranges": { "low": null, "high": 3.37 },
+    "calculated_from": ["TC", "HDL"],
+    "calculation": "Total Cholesterol − HDL"
+  },
+  {
+    "id": "TG",
+    "name": "Triglycerides",
+    "category": "Lipids",
+    "aliases": ["Triglycerides", "TG", "Trigs"],
+    "unit": "mmol/L",
+    "unit_conversions": [{ "from": "mg/dL", "multiply": 0.0113 }],
+    "ranges": { "low": null, "high": 1.70 },
+    "tiers": {
+      "normal":          { "low": null, "high": 1.70 },
+      "borderline_high": { "low": 1.70, "high": 2.25 },
+      "high":            { "low": 2.26, "high": 5.64 },
+      "very_high":       { "low": 5.64, "high": null }
+    },
+    "alert_thresholds": { "critical_low": null, "critical_high": 11.3 }
+  },
+  {
+    "id": "LDL_HDL",
+    "name": "LDL/HDL Ratio",
+    "category": "Lipids",
+    "aliases": ["LDL/HDL Ratio", "LDL:HDL"],
+    "unit": "ratio",
+    "unit_conversions": [],
+    "ranges": { "low": null, "high": 2.5 },
+    "calculated_from": ["LDL", "HDL"],
+    "calculation": "LDL ÷ HDL"
+  },
+  {
+    "id": "Chol_HDL",
+    "name": "Chol/HDL Ratio",
+    "category": "Lipids",
+    "aliases": ["Chol/HDL Ratio", "TC:HDL", "Cholesterol/HDL"],
+    "unit": "ratio",
+    "unit_conversions": [],
+    "ranges": { "low": null, "high": 4.0 },
+    "calculated_from": ["TC", "HDL"],
+    "calculation": "Total Cholesterol ÷ HDL"
+  },
+
+  {
+    "id": "Gluc",
+    "name": "Glucose (Fasting)",
+    "category": "Metabolic",
+    "aliases": ["Glucose", "Fasting Glucose", "FBG", "Blood Sugar", "BSL"],
+    "unit": "mmol/L",
+    "unit_conversions": [{ "from": "mg/dL", "multiply": 0.0556 }],
+    "ranges": { "low": 3.9, "high": 5.5 },
+    "tiers": {
+      "normal":      { "low": 3.9, "high": 5.5 },
+      "prediabetes": { "low": 5.6, "high": 6.9 },
+      "diabetes":    { "low": 7.0, "high": null }
+    },
+    "alert_thresholds": { "critical_low": 2.2, "critical_high": 20.0 }
+  },
+  {
+    "id": "Ins",
+    "name": "Insulin (Fasting)",
+    "category": "Metabolic",
+    "aliases": ["Insulin", "Fasting Insulin"],
+    "unit": "mU/L",
+    "unit_conversions": [{ "from": "µU/mL", "multiply": 1 }],
+    "ranges": { "low": null, "high": 20 },
+    "tiers": {
+      "optimal": { "low": null, "high": 10 }
+    }
+  },
+  {
+    "id": "HbA1c",
+    "name": "HbA1c",
+    "category": "Metabolic",
+    "aliases": ["HbA1c", "A1C", "Glycated Haemoglobin", "Glycosylated Hemoglobin"],
+    "unit": "%",
+    "unit_conversions": [],
+    "ranges": { "low": 4.0, "high": 5.6 },
+    "tiers": {
+      "normal":      { "low": 4.0, "high": 5.6 },
+      "prediabetes": { "low": 5.7, "high": 6.4 },
+      "diabetes":    { "low": 6.5, "high": null }
+    }
+  },
+
+  {
+    "id": "hsCRP",
+    "name": "hsCRP",
+    "category": "Inflammation",
+    "aliases": ["hsCRP", "hs-CRP", "High Sensitivity CRP", "C-Reactive Protein"],
+    "unit": "mg/L",
+    "unit_conversions": [],
+    "ranges": { "low": null, "high": 3.0 },
+    "tiers": {
+      "low_risk":     { "low": null, "high": 1.0 },
+      "average_risk": { "low": 1.0, "high": 3.0 },
+      "high_risk":    { "low": 3.0, "high": null }
+    }
+  },
+
+  {
+    "id": "TT",
+    "name": "Total Testosterone",
+    "category": "Androgens",
+    "aliases": ["Total Testosterone", "Testosterone", "TT"],
+    "unit": "nmol/L",
+    "unit_conversions": [{ "from": "ng/dL", "multiply": 0.0347 }],
+    "ranges": {
+      "male":   { "low": 10.1, "high": 38.2 },
+      "female": { "low": 0.62, "high": 1.87 }
+    }
+  },
+  {
+    "id": "SHBG",
+    "name": "SHBG",
+    "category": "Androgens",
+    "aliases": ["SHBG", "Sex Hormone Binding Globulin"],
+    "unit": "nmol/L",
+    "unit_conversions": [],
+    "ranges": {
+      "male":   { "low": 10, "high": 57 },
+      "female": { "low": 18, "high": 144 }
+    }
+  },
+  {
+    "id": "FT",
+    "name": "Free Testosterone",
+    "category": "Androgens",
+    "aliases": ["Free Testosterone", "Free Testo", "FT"],
+    "unit": "pmol/L",
+    "unit_conversions": [{ "from": "pg/mL", "multiply": 3.47 }],
+    "ranges": {
+      "male": { "low": 243, "high": 1041 }
+    },
+    "applicable_sex": "male"
+  },
+
+  {
+    "id": "DHEAS",
+    "name": "DHEA-S",
+    "category": "Adrenal",
+    "aliases": ["DHEA-S", "DHEAS", "Dehydroepiandrosterone Sulfate"],
+    "unit": "µmol/L",
+    "unit_conversions": [{ "from": "µg/dL", "multiply": 0.02714 }],
+    "ranges": {
+      "male":   { "low": 2.42, "high": 12.4 },
+      "female": { "low": 1.19, "high": 9.01 }
+    }
+  },
+
+  {
+    "id": "FSH",
+    "name": "FSH",
+    "category": "Pituitary/Gonadal",
+    "aliases": ["FSH", "Follicle Stimulating Hormone"],
+    "unit": "IU/L",
+    "unit_conversions": [],
+    "ranges": {
+      "male": { "low": 1, "high": 7 },
+      "female_follicular":     { "low": 2, "high": 9 },
+      "female_midcycle":       { "low": 4, "high": 22 },
+      "female_luteal":         { "low": 2, "high": 9 },
+      "female_postmenopause":  { "low": 30, "high": null }
+    }
+  },
+  {
+    "id": "LH",
+    "name": "LH",
+    "category": "Pituitary/Gonadal",
+    "aliases": ["LH", "Luteinising Hormone", "Luteinizing Hormone"],
+    "unit": "IU/L",
+    "unit_conversions": [],
+    "ranges": {
+      "male": { "low": 2, "high": 9 },
+      "female_follicular":     { "low": 1, "high": 12 },
+      "female_midcycle":       { "low": 9, "high": 80 },
+      "female_luteal":         { "low": 1, "high": 12 },
+      "female_postmenopause":  { "low": 30, "high": null }
+    }
+  },
+  {
+    "id": "E2",
+    "name": "Oestradiol (E2)",
+    "category": "Pituitary/Gonadal",
+    "aliases": ["Oestradiol", "Estradiol", "E2"],
+    "unit": "pmol/L",
+    "unit_conversions": [{ "from": "pg/mL", "multiply": 3.671 }],
+    "ranges": {
+      "male": { "low": 73, "high": 184 },
+      "female_follicular":     { "low": 37, "high": 661 },
+      "female_postmenopause":  { "low": null, "high": 37 }
+    }
+  },
+  {
+    "id": "Prog",
+    "name": "Progesterone",
+    "category": "Pituitary/Gonadal",
+    "aliases": ["Progesterone", "P4"],
+    "unit": "nmol/L",
+    "unit_conversions": [{ "from": "ng/mL", "multiply": 3.18 }],
+    "ranges": {
+      "male": { "low": 0.38, "high": 0.95 },
+      "female_follicular": { "low": 0.06, "high": 2.86 },
+      "female_luteal":     { "low": 6.36, "high": 95.4 }
+    }
+  },
+  {
+    "id": "PRL",
+    "name": "Prolactin",
+    "category": "Pituitary/Gonadal",
+    "aliases": ["Prolactin", "PRL"],
+    "unit": "mIU/L",
+    "unit_conversions": [{ "from": "ng/mL", "multiply": 21.2 }],
+    "ranges": { "low": null, "high": 420 }
+  },
+
+  {
+    "id": "TSH",
+    "name": "TSH",
+    "category": "Thyroid",
+    "aliases": ["TSH", "Thyroid Stimulating Hormone", "Thyrotropin"],
+    "unit": "mIU/L",
+    "unit_conversions": [],
+    "ranges": { "low": 0.50, "high": 4.00 }
+  },
+  {
+    "id": "FT4",
+    "name": "Free T4",
+    "category": "Thyroid",
+    "aliases": ["Free T4", "FT4", "Free Thyroxine", "Thyroxine"],
+    "unit": "pmol/L",
+    "unit_conversions": [{ "from": "ng/dL", "multiply": 12.87 }],
+    "ranges": { "low": 10, "high": 23 },
+    "pregnancy_range": { "low": 8, "high": 16 }
+  },
+  {
+    "id": "FT3",
+    "name": "Free T3",
+    "category": "Thyroid",
+    "aliases": ["Free T3", "FT3", "Free Triiodothyronine", "T3"],
+    "unit": "pmol/L",
+    "unit_conversions": [{ "from": "pg/mL", "multiply": 1.54 }],
+    "ranges": { "low": 3.5, "high": 6.5 },
+    "pregnancy_range": { "low": 3.0, "high": 5.5 }
+  },
+
+  {
+    "id": "VitD",
+    "name": "Vitamin D (25-OH)",
+    "category": "Vitamins/Minerals",
+    "aliases": ["Vitamin D", "25-OH Vitamin D", "25-Hydroxyvitamin D", "Vit D", "Cholecalciferol"],
+    "unit": "nmol/L",
+    "unit_conversions": [{ "from": "ng/mL", "multiply": 2.5 }],
+    "ranges": { "low": 50, "high": 250 },
+    "tiers": {
+      "deficiency":    { "low": null, "high": 30 },
+      "insufficiency": { "low": 30, "high": 50 },
+      "sufficient":    { "low": 50, "high": 75 },
+      "optimal":       { "low": 75, "high": 150 },
+      "toxicity":      { "low": 250, "high": null }
+    }
+  },
+  {
+    "id": "Hcy",
+    "name": "Homocysteine",
+    "category": "Vitamins/Minerals",
+    "aliases": ["Homocysteine", "Hcy"],
+    "unit": "µmol/L",
+    "unit_conversions": [],
+    "ranges": { "low": 5, "high": 15 },
+    "tiers": {
+      "optimal": { "low": null, "high": 10 }
+    }
+  },
+  {
+    "id": "B12",
+    "name": "Vitamin B12",
+    "category": "Vitamins/Minerals",
+    "aliases": ["Vitamin B12", "B12", "Cobalamin", "Cyanocobalamin"],
+    "unit": "pmol/L",
+    "unit_conversions": [{ "from": "pg/mL", "multiply": 0.738 }],
+    "ranges": { "low": 148, "high": 590 }
+  },
+  {
+    "id": "Folate",
+    "name": "Folate (Serum)",
+    "category": "Vitamins/Minerals",
+    "aliases": ["Folate", "Folic Acid", "Serum Folate", "Vitamin B9"],
+    "unit": "nmol/L",
+    "unit_conversions": [{ "from": "ng/mL", "multiply": 2.265 }],
+    "ranges": { "low": 4.1, "high": 20.4 }
+  },
+
+  {
+    "id": "Ferr",
+    "name": "Ferritin",
+    "category": "Iron Studies",
+    "aliases": ["Ferritin", "Ferr"],
+    "unit": "µg/L",
+    "unit_conversions": [{ "from": "ng/mL", "multiply": 1 }],
+    "ranges": {
+      "male":   { "low": 24, "high": 336 },
+      "female": { "low": 24, "high": 307 }
+    },
+    "pregnancy_range": { "low": 10, "high": 150 },
+    "tiers": {
+      "optimal": { "low": 50, "high": null }
+    }
+  },
+  {
+    "id": "Fe",
+    "name": "Iron",
+    "category": "Iron Studies",
+    "aliases": ["Iron", "Fe", "Serum Iron"],
+    "unit": "µmol/L",
+    "unit_conversions": [{ "from": "µg/dL", "multiply": 0.179 }],
+    "ranges": { "low": 9, "high": 27 }
+  },
+  {
+    "id": "Tf",
+    "name": "Transferrin",
+    "category": "Iron Studies",
+    "aliases": ["Transferrin", "Tf"],
+    "unit": "g/L",
+    "unit_conversions": [{ "from": "mg/dL", "multiply": 0.01 }],
+    "ranges": { "low": 2.0, "high": 4.0 }
+  },
+  {
+    "id": "TSAT",
+    "name": "Iron Saturation (Transferrin Sat.)",
+    "category": "Iron Studies",
+    "aliases": ["Iron Saturation", "Transferrin Saturation", "TSAT", "Iron Sat", "TS%"],
+    "unit": "%",
+    "unit_conversions": [],
+    "ranges": { "low": 20, "high": 50 }
+  },
+
+  {
+    "id": "WBC",
+    "name": "White Blood Cell Count (WBC)",
+    "category": "CBC",
+    "aliases": ["WBC", "White Blood Cells", "White Cell Count", "Leucocytes"],
+    "unit": "x10⁹/L",
+    "unit_conversions": [],
+    "ranges": { "low": 4.0, "high": 11.0 }
+  },
+  {
+    "id": "RBC",
+    "name": "Red Blood Cell Count (RBC)",
+    "category": "CBC",
+    "aliases": ["RBC", "Red Blood Cells", "Red Cell Count", "Erythrocytes"],
+    "unit": "x10¹²/L",
+    "unit_conversions": [],
+    "ranges": {
+      "male":   { "low": 4.5, "high": 5.9 },
+      "female": { "low": 4.0, "high": 5.2 }
+    }
+  },
+  {
+    "id": "Hb",
+    "name": "Haemoglobin (Hb)",
+    "category": "CBC",
+    "aliases": ["Haemoglobin", "Hemoglobin", "Hb", "HGB"],
+    "unit": "g/L",
+    "unit_conversions": [{ "from": "g/dL", "multiply": 10 }],
+    "ranges": {
+      "male":   { "low": 140, "high": 180 },
+      "female": { "low": 120, "high": 160 }
+    }
+  },
+  {
+    "id": "Hct",
+    "name": "Haematocrit (Hct)",
+    "category": "CBC",
+    "aliases": ["Haematocrit", "Hematocrit", "Hct", "HCT", "PCV"],
+    "unit": "ratio",
+    "unit_conversions": [],
+    "ranges": {
+      "male":   { "low": 0.42, "high": 0.50 },
+      "female": { "low": 0.37, "high": 0.47 }
+    }
+  },
+  {
+    "id": "MCV",
+    "name": "Mean Corpuscular Volume (MCV)",
+    "category": "CBC",
+    "aliases": ["MCV", "Mean Corpuscular Volume", "Mean Cell Volume"],
+    "unit": "fL",
+    "unit_conversions": [],
+    "ranges": { "low": 80, "high": 98 }
+  },
+  {
+    "id": "MCH",
+    "name": "Mean Corpuscular Haemoglobin (MCH)",
+    "category": "CBC",
+    "aliases": ["MCH", "Mean Corpuscular Haemoglobin", "Mean Cell Haemoglobin"],
+    "unit": "pg",
+    "unit_conversions": [],
+    "ranges": { "low": 28, "high": 32 }
+  },
+  {
+    "id": "RDW",
+    "name": "Red Cell Distribution Width (RDW)",
+    "category": "CBC",
+    "aliases": ["RDW", "Red Cell Distribution Width", "RDW-CV"],
+    "unit": "%",
+    "unit_conversions": [],
+    "ranges": { "low": 9.0, "high": 14.5 }
+  },
+  {
+    "id": "PLT",
+    "name": "Platelets (PLT)",
+    "category": "CBC",
+    "aliases": ["Platelets", "PLT", "Platelet Count", "Thrombocytes"],
+    "unit": "x10⁹/L",
+    "unit_conversions": [],
+    "ranges": { "low": 150, "high": 450 }
+  },
+
+  {
+    "id": "PSA",
+    "name": "PSA",
+    "category": "Prostate",
+    "aliases": ["PSA", "Prostate Specific Antigen"],
+    "unit": "µg/L",
+    "unit_conversions": [{ "from": "ng/mL", "multiply": 1 }],
+    "ranges": {
+      "<40":   { "low": null, "high": 1.4 },
+      "40-49": { "low": null, "high": 2.0 },
+      "50-59": { "low": null, "high": 3.0 },
+      "60-69": { "low": null, "high": 4.0 },
+      "70+":   { "low": null, "high": 5.0 }
+    },
+    "applicable_sex": "male"
+  }
+]
