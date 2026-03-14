@@ -14,6 +14,11 @@ pub fn run() {
             commands::list_bloodwork,
             commands::load_bloodwork,
             commands::run_orchestrator,
+            commands::extract_image,
+            commands::process_image,
+            commands::interpret_image,
+            commands::list_imaging_results,
+            commands::load_imaging_result,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
