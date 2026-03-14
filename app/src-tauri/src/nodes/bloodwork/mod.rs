@@ -1,6 +1,7 @@
 pub mod evaluate;
 pub mod import;
 pub mod pipeline;
+pub mod scoring;
 pub mod unify;
 
 use crate::pipeline::error::PipelineError;

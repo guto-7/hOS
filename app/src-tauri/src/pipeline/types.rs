@@ -99,7 +99,9 @@ pub struct DeviationMetric {
 /// A composite score from a validated clinical scoring system.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DomainScore {
-    /// Name of the scoring system (e.g. "MELD", "Framingham").
+    /// Which health domain this score belongs to (e.g. "Metabolic", "Longevity", "Hormonal").
+    pub domain: String,
+    /// Name of the scoring system (e.g. "HOMA-IR", "PhenoAge").
     pub system: String,
     /// The computed score value.
     pub score: f64,

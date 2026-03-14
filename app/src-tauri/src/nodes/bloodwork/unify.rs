@@ -3,6 +3,13 @@ use serde::{Deserialize, Serialize};
 use crate::pipeline::error::PipelineError;
 use crate::pipeline::types::{DeviationMetric, FlagClassification, RawData, ValidationResult, ValidationStatus};
 
+/// User demographic profile needed for age/sex-dependent scoring.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UserProfile {
+    pub sex: Option<String>,
+    pub age: Option<u32>,
+}
+
 /// Unified bloodwork data: parsed markers with standardised units and flags from Python Stage 2.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BloodworkData {
@@ -14,6 +21,8 @@ pub struct BloodworkData {
     pub lab_provider: Option<String>,
     /// Collection/test date.
     pub collection_date: Option<String>,
+    /// User profile for age/sex-dependent evaluation scores.
+    pub profile: UserProfile,
 }
 
 /// A single parsed blood marker with standardised value, demographic-adjusted
@@ -24,6 +33,8 @@ pub struct BloodworkMarker {
     pub name: String,
     /// Original name as it appeared on the PDF.
     pub original_name: Option<String>,
+    /// Category grouping (e.g. "Electrolytes/Renal", "Liver Function").
+    pub category: Option<String>,
     /// Standardised value (after unit conversion).
     pub value: f64,
     /// Standardised unit.
@@ -55,6 +66,17 @@ pub fn unify(raw: &RawData) -> Result<BloodworkData, PipelineError> {
 
     let markers = parse_markers_from_content(&raw.content);
 
+    let profile = UserProfile {
+        sex: raw.content.get("record")
+            .and_then(|r| r.get("sex"))
+            .and_then(|s| s.as_str())
+            .map(String::from),
+        age: raw.content.get("record")
+            .and_then(|r| r.get("age"))
+            .and_then(|a| a.as_u64())
+            .map(|a| a as u32),
+    };
+
     let validation = ValidationResult {
         status: if markers.is_empty() {
             ValidationStatus::Warning("No markers parsed from raw data".to_string())
@@ -69,6 +91,7 @@ pub fn unify(raw: &RawData) -> Result<BloodworkData, PipelineError> {
         validation,
         lab_provider,
         collection_date,
+        profile,
     })
 }
 
@@ -91,6 +114,11 @@ fn parse_markers_from_content(content: &serde_json::Value) -> Vec<BloodworkMarke
         let original_name = item
             .get("pdf_name")
             .and_then(|n| n.as_str())
+            .map(String::from);
+
+        let category = item
+            .get("category")
+            .and_then(|c| c.as_str())
             .map(String::from);
 
         // Stage 2 standardised value and unit
@@ -150,6 +178,7 @@ fn parse_markers_from_content(content: &serde_json::Value) -> Vec<BloodworkMarke
         markers.push(BloodworkMarker {
             name,
             original_name,
+            category,
             value: std_value,
             unit: std_unit.clone(),
             original_value,
