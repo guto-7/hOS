@@ -112,6 +112,7 @@ async fn extract_image(file_name: String, file_bytes: Vec<u8>) -> Result<String,
         .arg(data.to_str().unwrap())
         .arg("--json-stdout")
         .arg("--stage1-only")
+        .arg("--detect-body-part")
         .output()
         .map_err(|e| format!("Failed to run imaging pipeline: {e}"))?;
 
@@ -127,7 +128,8 @@ async fn extract_image(file_name: String, file_bytes: Vec<u8>) -> Result<String,
 }
 
 /// Run full imaging pipeline (Stage 1 + Stage 2 + model inference).
-/// `model` selects which model adapter to use: "chest-xray" or "fracture".
+/// `model` selects which model adapter to use: "chest-xray", "fracture-wrist",
+/// "fracture-multibody", or "auto" (Claude Vision body part detection → smart routing).
 #[tauri::command]
 async fn process_image(file_name: String, file_bytes: Vec<u8>, model: String) -> Result<String, String> {
     let data = data_dir()?;

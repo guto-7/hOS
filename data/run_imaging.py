@@ -5,14 +5,16 @@ run_imaging.py — Modular imaging pipeline orchestrator.
 Three-phase flow:
   Stage 1 (Importing):  Validate → Store with SHA-256 → Extract metadata
   Stage 2 (Unifying):   Grayscale → Intensity normalise [0,1] → Orientation correct
-  Model inference:       TorchXRayVision (or any model adapter)
+  Model inference:       Run selected model prediction
 
 Usage:
     python3 run_imaging.py <image_path> [--json-stdout] [--stage1-only] [--output-dir DIR] [--model MODEL]
 
 Models:
-    chest-xray   — TorchXRayVision DenseNet (18 pathologies)
-    fracture     — SigLIP2 bone fracture detection (fractured/not fractured)
+    chest-xray         — TorchXRayVision DenseNet (18 pathologies)
+    fracture-wrist     — YOLOv8 GRAZPEDWRI-DX (pediatric wrist fractures)
+    fracture-multibody — YOLOv8 multi-body (elbow, fingers, forearm, humerus, shoulder, wrist)
+    auto               — Auto-detect body part with Claude Vision, then route to best model
 """
 
 import sys
@@ -33,11 +35,19 @@ AVAILABLE_MODELS = {
         "name": "densenet121-res224-chex",
         "description": "TorchXRayVision DenseNet — 18 chest pathologies",
     },
-    "fracture": {
+    "fracture-wrist": {
         "name": "YOLOv8-GRAZPEDWRI",
-        "description": "YOLOv8 fracture detection with bounding boxes",
+        "description": "YOLOv8 pediatric wrist fracture detection",
     },
+    "fracture-multibody": {
+        "name": "YOLOv8-MultiBone",
+        "description": "YOLOv8 multi-body fracture detection (elbow, fingers, forearm, humerus, shoulder, wrist)",
+    },
+    # "auto" is handled specially — not a real model, but a routing mode
 }
+
+# Legacy alias
+AVAILABLE_MODELS["fracture"] = AVAILABLE_MODELS["fracture-wrist"]
 
 
 def run_pipeline(
@@ -47,6 +57,7 @@ def run_pipeline(
     stage1_only: bool = False,
     model: str = "chest-xray",
     pixel_spacing: float | None = None,
+    detect_body_part_flag: bool = False,
 ) -> dict:
     """
     Run the imaging pipeline.
@@ -107,7 +118,7 @@ def run_pipeline(
 
     # ── Stage 1 early return for confirmation ───────────────────────
     if stage1_only:
-        return {
+        stage1_result = {
             "success": True,
             "stage": "importing",
             "record": {
@@ -123,6 +134,27 @@ def run_pipeline(
             },
         }
 
+        # Optionally run body part detection during Stage 1
+        if detect_body_part_flag:
+            if not quiet:
+                print("[3.5/5] Auto-detecting body part...", file=sys.stderr)
+            try:
+                from imaging.importing.body_part_detector import detect_body_part
+                bp_info = detect_body_part(str(storage.stored_path))
+                stage1_result["body_part_detection"] = bp_info
+                if not quiet:
+                    print(f"      Detected: {bp_info['body_part']} "
+                          f"({bp_info['confidence']:.0%} confidence)", file=sys.stderr)
+            except Exception as e:
+                stage1_result["body_part_detection"] = {
+                    "body_part": "unknown",
+                    "confidence": 0.0,
+                    "description": f"Detection failed: {e}",
+                    "recommended_model": None,
+                }
+
+        return stage1_result
+
     # ── Stage 2: Unifying ───────────────────────────────────────────
     if not quiet:
         print("[4/5] Standardising image...", file=sys.stderr)
@@ -133,6 +165,27 @@ def run_pipeline(
         print(f"      {standardised.standardised_width}x{standardised.standardised_height} "
               f"grayscale, [0,1] float64", file=sys.stderr)
 
+    # ── Auto-detect body part if model is "auto" ─────────────────────
+    body_part_info = None
+    if model == "auto":
+        if not quiet:
+            print("[4.5/6] Auto-detecting body part with Claude Vision...", file=sys.stderr)
+        from imaging.importing.body_part_detector import detect_body_part
+        body_part_info = detect_body_part(str(storage.stored_path))
+        detected_model = body_part_info.get("recommended_model")
+        if not quiet:
+            print(f"      Detected: {body_part_info['body_part']} "
+                  f"({body_part_info['confidence']:.0%} confidence)", file=sys.stderr)
+            print(f"      → Routing to: {detected_model or 'unknown'}", file=sys.stderr)
+        if detected_model and detected_model in AVAILABLE_MODELS:
+            model = detected_model
+        else:
+            # Default to multi-body model for unknown body parts
+            model = "fracture-multibody"
+            if not quiet:
+                print(f"      ⚠ No specialised model for '{body_part_info['body_part']}', "
+                      f"using multi-body model", file=sys.stderr)
+
     # ── Model inference ─────────────────────────────────────────────
     if model not in AVAILABLE_MODELS:
         return {"success": False, "error": f"Unknown model '{model}'. Available: {', '.join(AVAILABLE_MODELS)}"}
@@ -142,14 +195,31 @@ def run_pipeline(
     if not quiet:
         print(f"[5/5] Running {model_info['description']}...", file=sys.stderr)
 
+    # Resolve pixel spacing — use detected body part for better estimates
+    detected_body_part = body_part_info["body_part"] if body_part_info else None
+    if pixel_spacing is None and model in ("fracture-wrist", "fracture", "fracture-multibody"):
+        pixel_spacing = _lookup_pixel_spacing(image_path, body_part=detected_body_part)
+
     if model == "chest-xray":
         from imaging.models.torchxrayvision_model import predict
         prediction = predict(standardised.pixels)
-    elif model == "fracture":
+    elif model in ("fracture-wrist", "fracture"):
         from imaging.models.fracture_model import predict
-        if pixel_spacing is None:
-            pixel_spacing = _lookup_pixel_spacing(image_path)
         prediction = predict(standardised.pixels, pixel_spacing_mm=pixel_spacing)
+        # Fallback: if wrist model finds nothing and we're in auto mode,
+        # try multi-body model (image may actually be forearm/hand/etc.)
+        if body_part_info and not prediction["findings"]:
+            if not quiet:
+                print("      No findings — falling back to multi-body model...", file=sys.stderr)
+            from imaging.models.fracture_multibody_model import predict as predict_multi
+            prediction = predict_multi(standardised.pixels, pixel_spacing_mm=pixel_spacing)
+            model = "fracture-multibody"
+            model_info = AVAILABLE_MODELS[model]
+    elif model == "fracture-multibody":
+        from imaging.models.fracture_multibody_model import predict
+        prediction = predict(standardised.pixels, pixel_spacing_mm=pixel_spacing)
+    else:
+        return {"success": False, "error": f"No inference handler for model '{model}'"}
     findings = prediction["findings"]
     heatmap_base64 = prediction.get("heatmap", "")
     heatmap_pathology = prediction.get("heatmap_pathology")
@@ -169,7 +239,7 @@ def run_pipeline(
         print(f"      {summary['total_pathologies_screened']} screened, "
               f"{summary['flagged_count']} flagged", file=sys.stderr)
 
-    return {
+    result = {
         "success": True,
         "stage": "complete",
         "record": {
@@ -188,9 +258,20 @@ def run_pipeline(
         "heatmap_pathology": heatmap_pathology,
     }
 
+    if body_part_info:
+        result["body_part_detection"] = body_part_info
 
-def _lookup_pixel_spacing(image_path: str) -> float | None:
-    """Try to find pixel spacing from GRAZPEDWRI-DX dataset CSV."""
+    return result
+
+
+def _lookup_pixel_spacing(image_path: str, body_part: str | None = None) -> float | None:
+    """Try to find pixel spacing from dataset CSV, or estimate from body part.
+
+    Priority:
+      1. Exact match in GRAZPEDWRI-DX dataset CSV (most accurate)
+      2. Body-part-specific default based on typical CR/DR detector pitch
+         and standard source-to-image distances for that anatomy
+    """
     import csv
 
     stem = Path(image_path).stem
@@ -201,7 +282,6 @@ def _lookup_pixel_spacing(image_path: str) -> float | None:
         image_dir.parent / "dataset.csv",
         image_dir.parent.parent / "dataset.csv",
     ]
-    # Also check in the data directory (where wrist_scans might be)
     script_dir = Path(__file__).resolve().parent
     candidates.append(script_dir / "wrist_scans" / "dataset.csv")
 
@@ -218,8 +298,24 @@ def _lookup_pixel_spacing(image_path: str) -> float | None:
         except Exception:
             continue
 
-    # Default pixel spacing for wrist X-ray digitizers (common DICOM value)
-    return 0.144
+    # Body-part-specific defaults (mm/pixel) — typical CR/DR values
+    # Based on common detector pixel pitch (0.1–0.2mm) and standard
+    # source-to-image distances for each anatomy
+    BODY_PART_SPACING = {
+        "wrist": 0.144,      # Standard wrist PA/lateral
+        "fingers": 0.100,    # Fine detail extremity
+        "hand": 0.120,       # Hand PA
+        "forearm": 0.175,    # Forearm AP/lateral
+        "elbow": 0.175,      # Elbow AP/lateral
+        "humerus": 0.200,    # Humerus AP
+        "shoulder": 0.200,   # Shoulder AP
+    }
+
+    if body_part and body_part in BODY_PART_SPACING:
+        return BODY_PART_SPACING[body_part]
+
+    # Fallback for unknown body parts
+    return 0.150
 
 
 def main():
@@ -228,18 +324,19 @@ def main():
     parser.add_argument("--output-dir", help="Base output directory")
     parser.add_argument("--json-stdout", action="store_true", help="Output JSON to stdout")
     parser.add_argument("--stage1-only", action="store_true", help="Run Stage 1 only (for confirmation)")
+    valid_models = list(AVAILABLE_MODELS.keys()) + ["auto"]
     parser.add_argument("--model", default="chest-xray",
-                        choices=list(AVAILABLE_MODELS.keys()),
-                        help="Model to use for analysis (default: chest-xray)")
+                        choices=valid_models,
+                        help="Model to use for analysis (default: chest-xray). Use 'auto' for smart body part detection.")
     parser.add_argument("--pixel-spacing", type=float, default=None,
                         help="Pixel spacing in mm (for real-world size estimates)")
     parser.add_argument("--quiet", action="store_true", help="Suppress progress output")
+    parser.add_argument("--detect-body-part", action="store_true",
+                        help="Run body part auto-detection (useful with --stage1-only)")
     args = parser.parse_args()
 
-    # Auto-detect pixel spacing from GRAZPEDWRI-DX dataset CSV if available
+    # Pixel spacing: use CLI arg if provided, otherwise resolved inside run_pipeline
     pixel_spacing = args.pixel_spacing
-    if pixel_spacing is None and args.model == "fracture":
-        pixel_spacing = _lookup_pixel_spacing(args.image_path)
 
     result = run_pipeline(
         image_path=args.image_path,
@@ -248,6 +345,7 @@ def main():
         stage1_only=args.stage1_only,
         model=args.model,
         pixel_spacing=pixel_spacing,
+        detect_body_part_flag=args.detect_body_part,
     )
 
     if args.json_stdout:

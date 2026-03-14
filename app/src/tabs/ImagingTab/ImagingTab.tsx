@@ -9,6 +9,7 @@ interface Finding {
   pathology: string;
   probability: number;
   level: "HIGH" | "MODERATE" | "LOW" | "MINIMAL";
+  body_part?: string;
   bbox?: { x1: number; y1: number; x2: number; y2: number };
   size?: { width_px: number; height_px: number; area_px: number; area_pct: number; width_mm?: number; height_mm?: number; pixel_spacing_mm?: number };
 }
@@ -37,6 +38,12 @@ interface ExtractionResult {
   quality: {
     warnings: string[];
     warning_count: number;
+  };
+  body_part_detection?: {
+    body_part: string;
+    confidence: number;
+    description: string;
+    recommended_model: string | null;
   };
 }
 
@@ -68,6 +75,12 @@ interface AnalysisResult {
   heatmap?: string;
   heatmap_pathology?: string;
   interpretation?: string;
+  body_part_detection?: {
+    body_part: string;
+    confidence: number;
+    description: string;
+    recommended_model: string | null;
+  };
 }
 
 interface HistoryRecord {
@@ -80,15 +93,17 @@ interface HistoryRecord {
   total_screened: number | null;
 }
 
-type Status = "loading" | "idle" | "selecting" | "extracting" | "confirming" | "processing" | "done" | "error";
+type Status = "loading" | "idle" | "extracting" | "confirming" | "processing" | "done" | "error";
 
 const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/tiff"];
 
-type ModelKey = "chest-xray" | "fracture";
+type ModelKey = "auto" | "chest-xray" | "fracture-wrist" | "fracture-multibody";
 
 const MODELS: { key: ModelKey; label: string; description: string }[] = [
+  { key: "auto", label: "Auto-Detect", description: "AI identifies body part and selects the best model automatically" },
   { key: "chest-xray", label: "Chest X-ray", description: "18 pathology screening (TorchXRayVision)" },
-  { key: "fracture", label: "Fracture Detection", description: "Object detection with bounding boxes (YOLOv8)" },
+  { key: "fracture-wrist", label: "Wrist Fracture", description: "Pediatric wrist fracture detection (YOLOv8 GRAZPEDWRI-DX)" },
+  { key: "fracture-multibody", label: "Multi-Body Fracture", description: "Elbow, fingers, forearm, humerus, shoulder, wrist (YOLOv8)" },
 ];
 
 /* ── Component ─────────────────────────────────────────────────── */
@@ -106,7 +121,7 @@ function ImagingTab() {
   const [history, setHistory] = useState<HistoryRecord[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [activeHash, setActiveHash] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState<ModelKey>("chest-xray");
+  const [selectedModel, setSelectedModel] = useState<ModelKey>("auto");
   const [showHeatmap, setShowHeatmap] = useState(true);
   const [interpretation, setInterpretation] = useState<string | null>(null);
   const [interpretationLoading, setInterpretationLoading] = useState(false);
@@ -208,6 +223,14 @@ function ImagingTab() {
         return;
       }
       setExtraction(parsed);
+
+      // Pre-select model based on body part detection
+      if (parsed.body_part_detection?.recommended_model) {
+        setSelectedModel(parsed.body_part_detection.recommended_model as ModelKey);
+      } else {
+        setSelectedModel("auto");
+      }
+
       setStatus("confirming");
     } catch (err) {
       setErrorMsg(String(err));
@@ -328,7 +351,7 @@ function ImagingTab() {
         </div>
       )}
 
-      {/* ── Idle: model selection cards ────────────────────── */}
+      {/* ── Idle: upload image ────────────────────────────── */}
       {status === "idle" && (
         <>
           {history.length > 0 && (
@@ -362,39 +385,6 @@ function ImagingTab() {
               ))}
             </div>
           )}
-
-          <div className={styles.modelPicker}>
-            <p className={styles.modelPickerLabel}>Select analysis type</p>
-            <div className={styles.modelOptions}>
-              {MODELS.map((m) => (
-                <button
-                  key={m.key}
-                  className={styles.modelCard}
-                  onClick={() => {
-                    setSelectedModel(m.key);
-                    setStatus("selecting");
-                  }}
-                >
-                  <span className={styles.modelOptionName}>{m.label}</span>
-                  <span className={styles.modelOptionDesc}>{m.description}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* ── Selecting: model chosen, upload image ────────────── */}
-      {status === "selecting" && (
-        <>
-          <div className={styles.selectedModelBar}>
-            <span className={styles.selectedModelLabel}>
-              {MODELS.find((m) => m.key === selectedModel)?.label}
-            </span>
-            <button className={styles.changeModelButton} onClick={() => setStatus("idle")}>
-              Change
-            </button>
-          </div>
 
           <div
             className={`${styles.dropzone} ${isDragOver ? styles.dropzoneActive : ""}`}
@@ -440,7 +430,7 @@ function ImagingTab() {
             </div>
           )}
           <p className={styles.statusText}>Validating {currentFile}...</p>
-          <p className={styles.statusHint}>Running Stage 1: format validation, storage, metadata extraction</p>
+          <p className={styles.statusHint}>Validating format, extracting metadata, and detecting scan type...</p>
         </div>
       )}
 
@@ -455,7 +445,47 @@ function ImagingTab() {
 
           <div className={styles.confirmationHeader}>
             <h2>Confirm Image</h2>
-            <p>Review the extracted metadata before analysis</p>
+            <p>Review the detected scan type and metadata before analysis</p>
+          </div>
+
+          {/* Body part detection result */}
+          {extraction.body_part_detection && (
+            <div className={styles.bodyPartDetection}>
+              <div className={styles.bodyPartDetectionHeader}>
+                <span className={styles.bodyPartDetectionLabel}>Detected scan type</span>
+                <span className={styles.bodyPartDetectionValue}>
+                  {extraction.body_part_detection.body_part.charAt(0).toUpperCase() +
+                    extraction.body_part_detection.body_part.slice(1)}
+                </span>
+                <span className={styles.bodyPartConfidence}>
+                  {(extraction.body_part_detection.confidence * 100).toFixed(0)}% confidence
+                </span>
+              </div>
+              {extraction.body_part_detection.description && (
+                <p className={styles.bodyPartDetectionDesc}>
+                  {extraction.body_part_detection.description}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Model selection — pre-filled from detection, user can override */}
+          <div className={styles.modelOverride}>
+            <p className={styles.modelOverrideLabel}>Analysis model</p>
+            <div className={styles.modelOverrideOptions}>
+              {MODELS.map((m) => (
+                <button
+                  key={m.key}
+                  className={`${styles.modelOverrideOption} ${
+                    selectedModel === m.key ? styles.modelOverrideActive : ""
+                  }`}
+                  onClick={() => setSelectedModel(m.key)}
+                >
+                  <span className={styles.modelOverrideName}>{m.label}</span>
+                  <span className={styles.modelOverrideDesc}>{m.description}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className={styles.confirmationSummary}>
@@ -487,12 +517,6 @@ function ImagingTab() {
             </div>
           )}
 
-          <div className={styles.selectedModelBar}>
-            <span className={styles.selectedModelLabel}>
-              Model: {MODELS.find((m) => m.key === selectedModel)?.label}
-            </span>
-          </div>
-
           <div className={styles.confirmationActions}>
             <button className={styles.cancelButton} onClick={reset}>Cancel</button>
             <button className={styles.confirmButton} onClick={confirmAndProcess}>
@@ -512,8 +536,14 @@ function ImagingTab() {
           )}
           <p className={styles.statusText}>Analyzing {currentFile}...</p>
           <p className={styles.statusHint}>
-            Running Stage 2 standardisation + {selectedModel === "chest-xray" ? "TorchXRayVision" : "YOLOv8 fracture detection"} inference
-            (this may take a moment on first run)
+            {selectedModel === "auto"
+              ? "Auto-detecting body part with Claude Vision, then running the best model..."
+              : `Running Stage 2 standardisation + ${
+                  selectedModel === "chest-xray"
+                    ? "TorchXRayVision"
+                    : "YOLOv8 fracture detection"
+                } inference`}
+            {" "}(this may take a moment on first run)
           </p>
         </div>
       )}
@@ -571,6 +601,21 @@ function ImagingTab() {
                   </span>
                 </button>
               ))}
+            </div>
+          )}
+
+          {result.body_part_detection && (
+            <div className={styles.bodyPartBanner}>
+              <span className={styles.bodyPartLabel}>Detected body part:</span>
+              <span className={styles.bodyPartValue}>
+                {result.body_part_detection.body_part.charAt(0).toUpperCase() + result.body_part_detection.body_part.slice(1)}
+              </span>
+              <span className={styles.bodyPartConfidence}>
+                ({(result.body_part_detection.confidence * 100).toFixed(0)}% confidence)
+              </span>
+              {result.body_part_detection.description && (
+                <span className={styles.bodyPartDesc}> — {result.body_part_detection.description}</span>
+              )}
             </div>
           )}
 

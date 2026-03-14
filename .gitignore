@@ -43,6 +43,7 @@ __pycache__/
 # Datasets & test images (not for repo)
 data/wrist_scans/
 data/Wrist_Scans_Demo/
+data/Multibody_Demo/
 data/archive.zip
 data/test_*.png
 data/test_*.jpg

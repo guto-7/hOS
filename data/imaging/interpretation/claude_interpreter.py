@@ -71,33 +71,41 @@ def interpret_findings(
     # Build content blocks
     content = []
 
-    # 1. Original image
+    # 1. Original image (resized if needed to stay under 5MB limit)
     original_b64, media_type = _encode_image(stored_image_path)
     if original_b64:
+        resized_b64 = _resize_base64_if_needed(original_b64, max_bytes=4_500_000)
+        # If resized, format is now JPEG; otherwise keep original media type
+        final_media_type = "image/jpeg" if resized_b64 != original_b64 else media_type
         content.append({
             "type": "image",
             "source": {
                 "type": "base64",
-                "media_type": media_type,
-                "data": original_b64,
+                "media_type": final_media_type,
+                "data": resized_b64,
             },
         })
 
     # 2. Annotated image (heatmap / bounding boxes)
     if heatmap_base64:
+        # Ensure image is under Claude's 5MB base64 limit by resizing if needed
+        heatmap_b64 = _resize_base64_if_needed(heatmap_base64, max_bytes=4_500_000)
+        heatmap_media = "image/jpeg" if heatmap_b64 != heatmap_base64 else "image/png"
         content.append({
             "type": "image",
             "source": {
                 "type": "base64",
-                "media_type": "image/png",
-                "data": heatmap_base64,
+                "media_type": heatmap_media,
+                "data": heatmap_b64,
             },
         })
 
     # 3. Text context
     model_desc = {
         "chest-xray": "TorchXRayVision DenseNet — screens for 18 chest pathologies with GradCAM heatmap",
-        "fracture": "YOLOv8 — bone fracture detection with bounding boxes",
+        "fracture": "YOLOv8 GRAZPEDWRI — pediatric wrist fracture detection with bounding boxes",
+        "fracture-wrist": "YOLOv8 GRAZPEDWRI — pediatric wrist fracture detection with bounding boxes",
+        "fracture-multibody": "YOLOv8 MultiBone — multi-body fracture detection (elbow, fingers, forearm, humerus, shoulder, wrist) with bounding boxes",
     }.get(model_key, model_key)
 
     findings_text = json.dumps(findings, indent=2)
@@ -133,6 +141,39 @@ Please interpret these findings."""
     )
 
     return response.content[0].text
+
+
+def _resize_base64_if_needed(b64_data: str, max_bytes: int = 4_500_000) -> str:
+    """Downscale a base64 PNG/JPEG so its encoded size stays under max_bytes.
+
+    Returns original string unchanged if already small enough.
+    When resizing is needed, outputs JPEG for much smaller file sizes.
+    """
+    if len(b64_data) <= max_bytes:
+        return b64_data
+
+    import io
+    from PIL import Image
+
+    raw = base64.b64decode(b64_data)
+    img = Image.open(io.BytesIO(raw)).convert("RGB")
+
+    # Iteratively shrink until under limit
+    scale = 0.8
+    for _ in range(8):
+        new_w = max(1, int(img.width * scale))
+        new_h = max(1, int(img.height * scale))
+        resized = img.resize((new_w, new_h), Image.LANCZOS)
+
+        buf = io.BytesIO()
+        resized.save(buf, format="JPEG", quality=85)
+        encoded = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+        if len(encoded) <= max_bytes:
+            return encoded
+        scale *= 0.75
+
+    return encoded
 
 
 def _encode_image(image_path: str) -> tuple[str, str]:
