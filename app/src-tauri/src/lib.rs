@@ -19,6 +19,9 @@ pub fn run() {
             commands::interpret_image,
             commands::list_imaging_results,
             commands::load_imaging_result,
+            commands::run_body_composition,
+            commands::list_body_composition,
+            commands::load_body_composition,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

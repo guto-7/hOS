@@ -1,0 +1,169 @@
+[
+  {
+    "id": "Weight",
+    "name": "Weight",
+    "category": "Body Composition",
+    "aliases": ["Weight", "Body Weight", "Wt", "BW"],
+    "unit": "kg",
+    "unit_conversions": [
+      { "from": "lbs", "multiply": 0.4536 },
+      { "from": "lb", "multiply": 0.4536 }
+    ],
+    "ranges": {
+      "male": { "low": 55.0, "high": 90.0 },
+      "female": { "low": 45.0, "high": 75.0 }
+    }
+  },
+  {
+    "id": "SMM",
+    "name": "Skeletal Muscle Mass",
+    "category": "Body Composition",
+    "aliases": ["Skeletal Muscle Mass", "SMM", "Skeletal Muscle", "Muscle Mass"],
+    "unit": "kg",
+    "unit_conversions": [
+      { "from": "lbs", "multiply": 0.4536 }
+    ],
+    "ranges": {
+      "male": { "low": 29.0, "high": 40.0 },
+      "female": { "low": 20.0, "high": 28.0 }
+    }
+  },
+  {
+    "id": "BFM",
+    "name": "Body Fat Mass",
+    "category": "Body Composition",
+    "aliases": ["Body Fat Mass", "BFM", "Fat Mass", "Body Fat"],
+    "unit": "kg",
+    "unit_conversions": [
+      { "from": "lbs", "multiply": 0.4536 }
+    ],
+    "ranges": {
+      "male": { "low": 5.0, "high": 20.0 },
+      "female": { "low": 8.0, "high": 25.0 }
+    }
+  },
+  {
+    "id": "BMI",
+    "name": "Body Mass Index",
+    "category": "Obesity Analysis",
+    "aliases": ["BMI", "Body Mass Index"],
+    "unit": "kg/m\u00b2",
+    "unit_conversions": [],
+    "ranges": {
+      "low": 18.5,
+      "high": 24.9
+    },
+    "alert_thresholds": {
+      "critical_low": 16.0,
+      "critical_high": 35.0
+    }
+  },
+  {
+    "id": "PBF",
+    "name": "Body Fat Percentage",
+    "category": "Obesity Analysis",
+    "aliases": ["PBF", "Percent Body Fat", "Body Fat Percentage", "Body Fat %", "BF%", "Fat %"],
+    "unit": "%",
+    "unit_conversions": [],
+    "ranges": {
+      "male": { "low": 10.0, "high": 20.0 },
+      "female": { "low": 18.0, "high": 28.0 }
+    },
+    "alert_thresholds": {
+      "critical_low": 3.0,
+      "critical_high": 40.0
+    }
+  },
+  {
+    "id": "VFL",
+    "name": "Visceral Fat Level",
+    "category": "Obesity Analysis",
+    "aliases": ["Visceral Fat Level", "VFL", "Visceral Fat", "Visceral Fat Area"],
+    "unit": "level",
+    "unit_conversions": [],
+    "ranges": {
+      "low": 1,
+      "high": 9
+    },
+    "alert_thresholds": {
+      "critical_high": 15
+    }
+  },
+  {
+    "id": "BMR",
+    "name": "Basal Metabolic Rate",
+    "category": "Research Parameters",
+    "aliases": ["Basal Metabolic Rate", "BMR", "Basal Metabolism"],
+    "unit": "kcal",
+    "unit_conversions": [
+      { "from": "kJ", "multiply": 0.2390 }
+    ],
+    "ranges": {
+      "male": { "low": 1400, "high": 2000 },
+      "female": { "low": 1100, "high": 1600 }
+    }
+  },
+  {
+    "id": "FFM",
+    "name": "Fat Free Mass",
+    "category": "Research Parameters",
+    "aliases": ["Fat Free Mass", "FFM", "Lean Body Mass", "LBM"],
+    "unit": "kg",
+    "unit_conversions": [
+      { "from": "lbs", "multiply": 0.4536 }
+    ],
+    "ranges": {
+      "male": { "low": 50.0, "high": 75.0 },
+      "female": { "low": 35.0, "high": 55.0 }
+    }
+  },
+  {
+    "id": "WaterPct",
+    "name": "Water Percentage",
+    "category": "Body Composition",
+    "aliases": ["Water Percentage", "Water %", "Total Body Water %", "TBW %", "Body Water"],
+    "unit": "%",
+    "unit_conversions": [],
+    "ranges": {
+      "male": { "low": 50.0, "high": 65.0 },
+      "female": { "low": 45.0, "high": 60.0 }
+    }
+  },
+  {
+    "id": "ProteinPct",
+    "name": "Protein Percentage",
+    "category": "Body Composition",
+    "aliases": ["Protein Percentage", "Protein %", "Body Protein %"],
+    "unit": "%",
+    "unit_conversions": [],
+    "ranges": {
+      "low": 16.0,
+      "high": 20.0
+    }
+  },
+  {
+    "id": "BoneMass",
+    "name": "Bone Mass",
+    "category": "Body Composition",
+    "aliases": ["Bone Mass", "Bone Mineral Content", "BMC", "Minerals", "Bone Minerals"],
+    "unit": "kg",
+    "unit_conversions": [
+      { "from": "lbs", "multiply": 0.4536 }
+    ],
+    "ranges": {
+      "male": { "low": 3.5, "high": 5.5 },
+      "female": { "low": 2.5, "high": 4.0 }
+    }
+  },
+  {
+    "id": "IdealWeight",
+    "name": "Ideal Weight",
+    "category": "Weight Control",
+    "aliases": ["Ideal Weight", "Target Weight", "Recommended Weight", "Ideal Body Weight"],
+    "unit": "kg",
+    "unit_conversions": [
+      { "from": "lbs", "multiply": 0.4536 }
+    ],
+    "ranges": {}
+  }
+]

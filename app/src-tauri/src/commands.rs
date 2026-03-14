@@ -1,6 +1,8 @@
 use std::fs;
 use std::process::Command;
 
+use crate::nodes::anthropometry::import::BodyCompositionInput;
+use crate::nodes::anthropometry::AnthropometryNode;
 use crate::nodes::bloodwork::import::BloodworkInput;
 use crate::nodes::bloodwork::BloodworkNode;
 use crate::orchestrator::{OrchestratorInput, OrchestratorNode};
@@ -302,6 +304,78 @@ pub async fn load_imaging_result(file_hash: String) -> Result<String, String> {
     }
 
     fs::read_to_string(&result_path).map_err(|e| format!("Failed to read result: {e}"))
+}
+
+// ---------------------------------------------------------------------------
+// Body Composition commands
+// ---------------------------------------------------------------------------
+
+/// Run the full body composition pipeline on an uploaded BIA PDF.
+#[tauri::command]
+pub async fn run_body_composition(
+    file_name: String,
+    file_bytes: Vec<u8>,
+    sex: Option<String>,
+    age: Option<u32>,
+) -> Result<String, String> {
+    let node = AnthropometryNode;
+    let input = BodyCompositionInput {
+        file_name,
+        file_bytes,
+        sex,
+        age,
+    };
+
+    let contract = pipeline::run_pipeline(&node, input).map_err(|e| e.to_string())?;
+
+    // Store the contract
+    let base_dir = util::data_dir()?;
+    let storage =
+        FsNodeStorage::new(&base_dir, node.node_id()).map_err(|e| e.to_string())?;
+    storage.store_contract(&contract).map_err(|e| e.to_string())?;
+
+    serde_json::to_string(&contract).map_err(|e| e.to_string())
+}
+
+/// List all stored body composition results (metadata only).
+#[tauri::command]
+pub async fn list_body_composition() -> Result<String, String> {
+    let base_dir = util::data_dir()?;
+    let storage =
+        FsNodeStorage::new(&base_dir, "anthropometry").map_err(|e| e.to_string())?;
+
+    let hashes = storage.list_contracts().map_err(|e| e.to_string())?;
+
+    let mut summaries: Vec<serde_json::Value> = Vec::new();
+    for hash in &hashes {
+        if let Ok(contract) = storage.load_contract(hash) {
+            summaries.push(serde_json::json!({
+                "source_hash": contract.metadata.source_hash,
+                "original_name": contract.metadata.original_name,
+                "collection_date": contract.collection_date,
+                "node_id": contract.node_id,
+                "schema_version": contract.schema_version,
+                "critical_flags_count": contract.evaluation.critical_flags.len(),
+                "certainty_grade": format!("{:?}", contract.evaluation.certainty.grade),
+            }));
+        }
+    }
+
+    serde_json::to_string(&summaries).map_err(|e| e.to_string())
+}
+
+/// Load a specific body composition result by source hash.
+#[tauri::command]
+pub async fn load_body_composition(source_hash: String) -> Result<String, String> {
+    let base_dir = util::data_dir()?;
+    let storage =
+        FsNodeStorage::new(&base_dir, "anthropometry").map_err(|e| e.to_string())?;
+
+    let contract = storage
+        .load_contract(&source_hash)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_string(&contract).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
