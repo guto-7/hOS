@@ -164,6 +164,7 @@
     "unit_conversions": [
       { "from": "lbs", "multiply": 0.4536 }
     ],
-    "ranges": {}
+    "ranges": {},
+    "informational": true
   }
 ]

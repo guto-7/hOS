@@ -72,6 +72,7 @@ pub enum FlagClassification {
     Low,
     High,
     Critical,
+    Info,
 }
 
 /// Quantified deviation from reference range.

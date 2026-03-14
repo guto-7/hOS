@@ -159,6 +159,7 @@ fn map_python_flag(flag: &str) -> FlagClassification {
         "OPTIMAL" => FlagClassification::Normal,
         "LOW" => FlagClassification::Low,
         "HIGH" => FlagClassification::High,
+        "INFO" => FlagClassification::Info,
         _ => FlagClassification::Normal,
     }
 }

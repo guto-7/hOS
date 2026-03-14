@@ -9,7 +9,7 @@ interface DeviationMetric {
   reference_low: number | null;
   reference_high: number | null;
   unit: string;
-  flag: "Normal" | "Low" | "High" | "Critical";
+  flag: "Normal" | "Low" | "High" | "Critical" | "Info";
   deviation_fraction: number | null;
 }
 
@@ -89,6 +89,7 @@ function formatRefRange(low: number | null, high: number | null): string {
 function flagClass(flag: string, s: typeof styles): string {
   if (flag === "Critical") return s.flagCritical;
   if (flag === "High" || flag === "Low") return s.flagAbnormal;
+  if (flag === "Info") return s.flagInfo;
   return s.flagOptimal;
 }
 
@@ -207,7 +208,7 @@ function AnthropometryContent() {
   };
 
   const markers = contract?.unified_data.markers ?? [];
-  const flaggedMarkers = markers.filter((m) => m.deviation.flag !== "Normal");
+  const flaggedMarkers = markers.filter((m) => m.deviation.flag !== "Normal" && m.deviation.flag !== "Info");
   const criticalFlags = contract?.evaluation.critical_flags ?? [];
 
   return (
@@ -388,7 +389,7 @@ function AnthropometryContent() {
                   </td>
                   <td>
                     <span className={flagClass(m.deviation.flag, styles)}>
-                      {m.deviation.flag}
+                      {m.deviation.flag === "Info" ? "—" : m.deviation.flag}
                     </span>
                   </td>
                 </tr>

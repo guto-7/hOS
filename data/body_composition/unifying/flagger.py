@@ -10,6 +10,7 @@ Output: list of FlaggedMarker (the final enriched output of Stage 2)
 
 from dataclasses import dataclass
 from .ranger import RangedMarker
+from ..importing.resolver import load_markers
 
 
 @dataclass
@@ -101,16 +102,32 @@ def _compute_deviation(
 
 def compute_flags(
     ranged_markers: list[RangedMarker],
+    markers_def: list[dict] | None = None,
 ) -> list[FlaggedMarker]:
     """Compute flags and deviations for all ranged markers."""
+    if markers_def is None:
+        markers_def = load_markers()
+    defs_by_id = {m["id"]: m for m in markers_def}
+
     flagged = []
     for m in ranged_markers:
-        flag = _compute_flag(
-            m.std_value, m.canonical_ref_low, m.canonical_ref_high
+        # Informational markers (e.g. Ideal Weight) show value but skip flagging
+        is_informational = (
+            m.marker_id
+            and m.marker_id in defs_by_id
+            and defs_by_id[m.marker_id].get("informational", False)
         )
-        deviation_str, deviation_pct = _compute_deviation(
-            m.std_value, m.canonical_ref_low, m.canonical_ref_high
-        )
+
+        if is_informational:
+            flag = "INFO"
+            deviation_str, deviation_pct = None, None
+        else:
+            flag = _compute_flag(
+                m.std_value, m.canonical_ref_low, m.canonical_ref_high
+            )
+            deviation_str, deviation_pct = _compute_deviation(
+                m.std_value, m.canonical_ref_low, m.canonical_ref_high
+            )
 
         flagged.append(FlaggedMarker(
             pdf_name=m.pdf_name,

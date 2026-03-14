@@ -196,6 +196,11 @@
   font-size: var(--text-xs);
 }
 
+.flagInfo {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
 /* --- Warning banner --- */
 
 .warningBanner {
