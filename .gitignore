@@ -30,3 +30,22 @@ Thumbs.db
 
 # Claude Code
 .claude/
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# Model weights (large binary files)
+*.ckpt
+*.pt
+
+# Datasets & test images (not for repo)
+data/wrist_scans/
+data/Wrist_Scans_Demo/
+data/archive.zip
+data/test_*.png
+data/test_*.jpg
+data/Wrist*.png
+data/Wrist*.jpg
+data/Sample-*.png

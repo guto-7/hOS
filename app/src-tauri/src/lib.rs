@@ -173,6 +173,52 @@ async fn process_image(file_name: String, file_bytes: Vec<u8>, model: String) ->
     Ok(json_output)
 }
 
+/// Run Stage 3: Claude API interpretation on a saved imaging result.
+#[tauri::command]
+async fn interpret_image(file_hash: String) -> Result<String, String> {
+    let data = data_dir()?;
+    let result_path = data.join("results").join("imaging").join(format!("{file_hash}.json"));
+
+    if !result_path.exists() {
+        return Err(format!("No saved result for hash {file_hash}"));
+    }
+
+    let script = find_script("run_interpret.py")?;
+    let python = find_venv_python(&script)?;
+
+    let output = Command::new(&python)
+        .arg(&script)
+        .arg("--result-path")
+        .arg(result_path.to_str().unwrap())
+        .arg("--json-stdout")
+        .output()
+        .map_err(|e| format!("Failed to run interpretation: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Interpretation failed: {stderr}"));
+    }
+
+    let json_output = String::from_utf8_lossy(&output.stdout).to_string();
+
+    // If interpretation succeeded, update the saved result with the interpretation
+    if let Ok(interp) = serde_json::from_str::<serde_json::Value>(&json_output) {
+        if interp.get("success").and_then(|s| s.as_bool()).unwrap_or(false) {
+            if let Some(interpretation) = interp.get("interpretation") {
+                let saved_result_path = data.join("results").join("imaging").join(format!("{file_hash}.json"));
+                if let Ok(content) = fs::read_to_string(&saved_result_path) {
+                    if let Ok(mut parsed) = serde_json::from_str::<serde_json::Value>(&content) {
+                        parsed.as_object_mut().map(|obj| obj.insert("interpretation".to_string(), interpretation.clone()));
+                        let _ = fs::write(&saved_result_path, serde_json::to_string(&parsed).unwrap_or_default());
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(json_output)
+}
+
 /// List all saved imaging results (metadata only).
 #[tauri::command]
 async fn list_imaging_results() -> Result<String, String> {
@@ -338,7 +384,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
-        .invoke_handler(tauri::generate_handler![extract_pdf, process_pdf, list_bloodwork_results, load_bloodwork_result, extract_image, process_image, list_imaging_results, load_imaging_result])
+        .invoke_handler(tauri::generate_handler![extract_pdf, process_pdf, list_bloodwork_results, load_bloodwork_result, extract_image, process_image, interpret_image, list_imaging_results, load_imaging_result])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

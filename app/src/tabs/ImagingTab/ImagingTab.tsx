@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import ReactMarkdown from "react-markdown";
 import styles from "./ImagingTab.module.css";
 
 /* ── Types ─────────────────────────────────────────────────────── */
@@ -8,6 +9,8 @@ interface Finding {
   pathology: string;
   probability: number;
   level: "HIGH" | "MODERATE" | "LOW" | "MINIMAL";
+  bbox?: { x1: number; y1: number; x2: number; y2: number };
+  size?: { width_px: number; height_px: number; area_px: number; area_pct: number; width_mm?: number; height_mm?: number; pixel_spacing_mm?: number };
 }
 
 interface ExtractionResult {
@@ -62,6 +65,9 @@ interface AnalysisResult {
     total_pathologies_screened: number;
     flagged_count: number;
   };
+  heatmap?: string;
+  heatmap_pathology?: string;
+  interpretation?: string;
 }
 
 interface HistoryRecord {
@@ -82,7 +88,7 @@ type ModelKey = "chest-xray" | "fracture";
 
 const MODELS: { key: ModelKey; label: string; description: string }[] = [
   { key: "chest-xray", label: "Chest X-ray", description: "18 pathology screening (TorchXRayVision)" },
-  { key: "fracture", label: "Fracture Detection", description: "Bone fracture classification (SigLIP2)" },
+  { key: "fracture", label: "Fracture Detection", description: "Object detection with bounding boxes (YOLOv8)" },
 ];
 
 /* ── Component ─────────────────────────────────────────────────── */
@@ -101,6 +107,10 @@ function ImagingTab() {
   const [showHistory, setShowHistory] = useState(false);
   const [activeHash, setActiveHash] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<ModelKey>("chest-xray");
+  const [showHeatmap, setShowHeatmap] = useState(true);
+  const [interpretation, setInterpretation] = useState<string | null>(null);
+  const [interpretationLoading, setInterpretationLoading] = useState(false);
+  const [interpretationError, setInterpretationError] = useState<string | null>(null);
 
   /* ── History ──────────────────────────────────────────────────── */
 
@@ -115,6 +125,25 @@ function ImagingTab() {
     }
   }, []);
 
+  const fetchInterpretation = useCallback(async (hash: string) => {
+    setInterpretation(null);
+    setInterpretationError(null);
+    setInterpretationLoading(true);
+    try {
+      const json = await invoke<string>("interpret_image", { fileHash: hash });
+      const parsed = JSON.parse(json);
+      if (parsed.success) {
+        setInterpretation(parsed.interpretation);
+      } else {
+        setInterpretationError(parsed.error || "Interpretation failed");
+      }
+    } catch (err) {
+      setInterpretationError(String(err));
+    } finally {
+      setInterpretationLoading(false);
+    }
+  }, []);
+
   const loadResult = useCallback(async (hash: string) => {
     try {
       const json = await invoke<string>("load_imaging_result", { fileHash: hash });
@@ -123,12 +152,21 @@ function ImagingTab() {
       setCurrentFile(parsed.record.original_name);
       setActiveHash(hash);
       setPreviewUrl(null);
+      setShowHeatmap(true);
       setStatus("done");
+      // Load saved interpretation or fetch new one
+      if (parsed.interpretation) {
+        setInterpretation(parsed.interpretation);
+        setInterpretationError(null);
+        setInterpretationLoading(false);
+      } else {
+        fetchInterpretation(hash);
+      }
     } catch (err) {
       setErrorMsg(String(err));
       setStatus("error");
     }
-  }, []);
+  }, [fetchInterpretation]);
 
   useEffect(() => {
     (async () => {
@@ -194,11 +232,13 @@ function ImagingTab() {
       setStatus("done");
       setFileBytes(null);
       await loadHistory();
+      // Fire off interpretation async (non-blocking)
+      fetchInterpretation(parsed.record.file_hash);
     } catch (err) {
       setErrorMsg(String(err));
       setStatus("error");
     }
-  }, [fileBytes, currentFile, selectedModel, loadHistory]);
+  }, [fileBytes, currentFile, selectedModel, loadHistory, fetchInterpretation]);
 
   const handleFiles = useCallback(
     (files: FileList | null) => {
@@ -245,6 +285,9 @@ function ImagingTab() {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
     setShowHistory(false);
+    setInterpretation(null);
+    setInterpretationLoading(false);
+    setInterpretationError(null);
   };
 
   /* ── Helpers ─────────────────────────────────────────────────── */
@@ -469,7 +512,7 @@ function ImagingTab() {
           )}
           <p className={styles.statusText}>Analyzing {currentFile}...</p>
           <p className={styles.statusHint}>
-            Running Stage 2 standardisation + {selectedModel === "chest-xray" ? "TorchXRayVision" : "Fracture Detection"} inference
+            Running Stage 2 standardisation + {selectedModel === "chest-xray" ? "TorchXRayVision" : "YOLOv8 fracture detection"} inference
             (this may take a moment on first run)
           </p>
         </div>
@@ -531,9 +574,45 @@ function ImagingTab() {
             </div>
           )}
 
-          {previewUrl && (
-            <div className={styles.previewContainer}>
-              <img src={previewUrl} alt="Analyzed X-ray" className={styles.previewImage} />
+          {(previewUrl || result.heatmap) && (
+            <div className={styles.previewSection}>
+              {result.heatmap && (
+                <div className={styles.previewToggle}>
+                  <button
+                    className={`${styles.toggleButton} ${showHeatmap ? styles.toggleActive : ""}`}
+                    onClick={() => setShowHeatmap(true)}
+                  >
+                    {result.findings.some((f) => f.bbox) ? "Detection" : "GradCAM Heatmap"}
+                  </button>
+                  {previewUrl && (
+                    <button
+                      className={`${styles.toggleButton} ${!showHeatmap ? styles.toggleActive : ""}`}
+                      onClick={() => setShowHeatmap(false)}
+                    >
+                      Original
+                    </button>
+                  )}
+                </div>
+              )}
+              <div className={styles.previewContainer}>
+                {showHeatmap && result.heatmap ? (
+                  <img
+                    src={`data:image/png;base64,${result.heatmap}`}
+                    alt="GradCAM heatmap"
+                    className={styles.previewImage}
+                  />
+                ) : previewUrl ? (
+                  <img src={previewUrl} alt="Analyzed X-ray" className={styles.previewImage} />
+                ) : null}
+              </div>
+              {showHeatmap && result.heatmap_pathology && (
+                <p className={styles.heatmapCaption}>
+                  {result.findings.some((f) => f.bbox)
+                    ? <strong>{result.heatmap_pathology}</strong>
+                    : <>Activation map for: <strong>{result.heatmap_pathology}</strong></>
+                  }
+                </p>
+              )}
             </div>
           )}
 
@@ -542,7 +621,8 @@ function ImagingTab() {
               <tr>
                 <th>Pathology</th>
                 <th>Probability</th>
-                <th style={{ width: "35%" }}>Score</th>
+                <th style={{ width: "30%" }}>Score</th>
+                {result.findings.some((f) => f.size) && <th>Region Size</th>}
                 <th>Level</th>
               </tr>
             </thead>
@@ -572,6 +652,15 @@ function ImagingTab() {
                       </div>
                     </div>
                   </td>
+                  {result.findings.some((fi) => fi.size) && (
+                    <td className={styles.mono}>
+                      {f.size
+                        ? f.size.width_mm
+                          ? `${f.size.width_mm}×${f.size.height_mm}mm`
+                          : `${f.size.width_px.toFixed(0)}×${f.size.height_px.toFixed(0)}px`
+                        : "—"}
+                    </td>
+                  )}
                   <td>
                     <span className={levelClass(f.level)}>{f.level}</span>
                   </td>
@@ -579,6 +668,41 @@ function ImagingTab() {
               ))}
             </tbody>
           </table>
+
+          {/* ── AI Interpretation (Stage 3) ────────────────────── */}
+          <div className={styles.interpretationCard}>
+            <h3 className={styles.interpretationHeading}>AI Interpretation</h3>
+            <div className={styles.interpretationDisclaimer}>
+              AI-generated interpretation for educational purposes only. Not a substitute for professional medical diagnosis.
+            </div>
+
+            {interpretationLoading && (
+              <div className={styles.interpretationLoading}>
+                <div className={styles.loadingDots}>
+                  <span /><span /><span />
+                </div>
+                <p>Generating clinical interpretation...</p>
+              </div>
+            )}
+
+            {interpretationError && !interpretationLoading && (
+              <div className={styles.interpretationErrorState}>
+                <p>Interpretation unavailable: {interpretationError}</p>
+                <button
+                  className={styles.retryButton}
+                  onClick={() => activeHash && fetchInterpretation(activeHash)}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {interpretation && !interpretationLoading && (
+              <div className={styles.interpretationContent}>
+                <ReactMarkdown>{interpretation}</ReactMarkdown>
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>

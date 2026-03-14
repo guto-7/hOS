@@ -60,7 +60,13 @@ def standardise_image(file_path: str | Path) -> StandardisedImage:
     img = ImageOps.exif_transpose(img)
 
     # Step 2: Convert to grayscale
-    was_converted = img.mode not in ("L", "I", "F")
+    # Handle 16-bit modes (I;16, I;16B, etc.) by converting to 32-bit int
+    # first to preserve full dynamic range — direct convert("L") clips badly
+    if img.mode.startswith("I;"):
+        img = img.convert("I")
+        was_converted = False
+    else:
+        was_converted = img.mode not in ("L", "I", "F")
     if was_converted:
         img = img.convert("L")
 

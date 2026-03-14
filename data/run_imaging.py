@@ -34,8 +34,8 @@ AVAILABLE_MODELS = {
         "description": "TorchXRayVision DenseNet — 18 chest pathologies",
     },
     "fracture": {
-        "name": "Bone-Fracture-Detection",
-        "description": "SigLIP2 fracture detection — fractured vs not fractured",
+        "name": "YOLOv8-GRAZPEDWRI",
+        "description": "YOLOv8 fracture detection with bounding boxes",
     },
 }
 
@@ -46,6 +46,7 @@ def run_pipeline(
     quiet: bool = False,
     stage1_only: bool = False,
     model: str = "chest-xray",
+    pixel_spacing: float | None = None,
 ) -> dict:
     """
     Run the imaging pipeline.
@@ -143,10 +144,15 @@ def run_pipeline(
 
     if model == "chest-xray":
         from imaging.models.torchxrayvision_model import predict
+        prediction = predict(standardised.pixels)
     elif model == "fracture":
         from imaging.models.fracture_model import predict
-
-    findings = predict(standardised.pixels)
+        if pixel_spacing is None:
+            pixel_spacing = _lookup_pixel_spacing(image_path)
+        prediction = predict(standardised.pixels, pixel_spacing_mm=pixel_spacing)
+    findings = prediction["findings"]
+    heatmap_base64 = prediction.get("heatmap", "")
+    heatmap_pathology = prediction.get("heatmap_pathology")
 
     # Generate summary
     high = [f for f in findings if f["level"] == "HIGH"]
@@ -178,7 +184,42 @@ def run_pipeline(
         "model_key": model,
         "findings": findings,
         "summary": summary,
+        "heatmap": heatmap_base64,
+        "heatmap_pathology": heatmap_pathology,
     }
+
+
+def _lookup_pixel_spacing(image_path: str) -> float | None:
+    """Try to find pixel spacing from GRAZPEDWRI-DX dataset CSV."""
+    import csv
+
+    stem = Path(image_path).stem
+    # Search for dataset CSV near the image or in known locations
+    image_dir = Path(image_path).resolve().parent
+    candidates = [
+        image_dir / "dataset.csv",
+        image_dir.parent / "dataset.csv",
+        image_dir.parent.parent / "dataset.csv",
+    ]
+    # Also check in the data directory (where wrist_scans might be)
+    script_dir = Path(__file__).resolve().parent
+    candidates.append(script_dir / "wrist_scans" / "dataset.csv")
+
+    for csv_path in candidates:
+        if not csv_path.exists():
+            continue
+        try:
+            with open(csv_path) as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row.get("filestem") == stem:
+                        spacing = float(row["pixel_spacing"])
+                        return spacing
+        except Exception:
+            continue
+
+    # Default pixel spacing for wrist X-ray digitizers (common DICOM value)
+    return 0.144
 
 
 def main():
@@ -190,8 +231,15 @@ def main():
     parser.add_argument("--model", default="chest-xray",
                         choices=list(AVAILABLE_MODELS.keys()),
                         help="Model to use for analysis (default: chest-xray)")
+    parser.add_argument("--pixel-spacing", type=float, default=None,
+                        help="Pixel spacing in mm (for real-world size estimates)")
     parser.add_argument("--quiet", action="store_true", help="Suppress progress output")
     args = parser.parse_args()
+
+    # Auto-detect pixel spacing from GRAZPEDWRI-DX dataset CSV if available
+    pixel_spacing = args.pixel_spacing
+    if pixel_spacing is None and args.model == "fracture":
+        pixel_spacing = _lookup_pixel_spacing(args.image_path)
 
     result = run_pipeline(
         image_path=args.image_path,
@@ -199,6 +247,7 @@ def main():
         quiet=args.quiet or args.json_stdout,
         stage1_only=args.stage1_only,
         model=args.model,
+        pixel_spacing=pixel_spacing,
     )
 
     if args.json_stdout:
