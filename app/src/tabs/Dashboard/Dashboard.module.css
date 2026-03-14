@@ -1,0 +1,21 @@
+.dashboard {
+  max-width: var(--content-max-width);
+}
+
+.heading {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+  color: var(--text-primary);
+  margin-bottom: var(--space-3);
+}
+
+.description {
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+  margin-bottom: var(--space-6);
+}
+
+.empty {
+  color: var(--text-muted);
+}

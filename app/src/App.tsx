@@ -1,28 +1,52 @@
 import { useState } from "react";
-import TabBar from "./components/TabBar/TabBar";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import Navigation from "./components/Navigation/Navigation";
+import Dashboard from "./tabs/Dashboard/Dashboard";
+import Chat from "./tabs/Chat/Chat";
 import Disclaimer from "./components/Disclaimer/Disclaimer";
-import DataTab from "./tabs/DataTab/DataTab";
-import DiagnosticTreePanel from "./features/diagnosticTree/DiagnosticTreePanel";
-import ChatTab from "./tabs/ChatTab/ChatTab";
-import ImagingTab from "./tabs/ImagingTab/ImagingTab";
 import styles from "./App.module.css";
 
-export type TabId = "data" | "imaging" | "interpretation" | "chat";
+type ViewId = "dashboard" | "navigation" | "chat";
+
+const VIEWS: { id: ViewId; label: string }[] = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "navigation", label: "Navigation" },
+  { id: "chat", label: "Chat" },
+];
 
 function App() {
-  const [activeTab, setActiveTab] = useState<TabId>("data");
+  const [activeNodeId, setActiveNodeId] = useState("bloodwork");
+  const [activeView, setActiveView] = useState<ViewId>("navigation");
+
+  const handleDrag = (e: React.MouseEvent) => {
+    if (e.button === 0 && (e.target as HTMLElement).tagName !== "BUTTON") {
+      getCurrentWindow().startDragging();
+    }
+  };
 
   return (
     <div className={styles.app}>
-      <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
-      <main
-        className={`${styles.content} ${activeTab === "interpretation" ? styles.contentFull : ""}`}
-        role="tabpanel"
-      >
-        {activeTab === "data" && <DataTab />}
-        {activeTab === "imaging" && <ImagingTab />}
-        {activeTab === "interpretation" && <DiagnosticTreePanel />}
-        {activeTab === "chat" && <ChatTab />}
+      <header className={styles.titleBar} onMouseDown={handleDrag}>
+        <nav className={styles.pill} role="tablist" aria-label="View navigation">
+          {VIEWS.map((view) => (
+            <button
+              key={view.id}
+              role="tab"
+              aria-selected={activeView === view.id}
+              className={`${styles.tab} ${activeView === view.id ? styles.tabActive : ""}`}
+              onClick={() => setActiveView(view.id)}
+            >
+              {view.label}
+            </button>
+          ))}
+        </nav>
+      </header>
+      <main className={`${styles.content} ${activeView === "navigation" ? styles.contentFull : ""}`} role="tabpanel">
+        {activeView === "navigation" && (
+          <Navigation activeNodeId={activeNodeId} onNodeChange={setActiveNodeId} />
+        )}
+        {activeView === "dashboard" && <Dashboard activeNodeId={activeNodeId} />}
+        {activeView === "chat" && <Chat activeNodeId={activeNodeId} />}
       </main>
       <Disclaimer />
     </div>

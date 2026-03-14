@@ -6,3 +6,12 @@ the medical Orchestrator also shares the same node architecture, but its inputs 
   Each node has its own dedicated UI or dashboard and chat - this allows for deep diagonstics overview for each domain while the Orchestrator gives a   general overview + systemic interations. You are not trying to manage everything in one dashboard. The way this is managed is that each node has its   own pipeline + its own frontend. Frontends (data + chat) are traversed using the tree in the naviagation console (centre tab in the app). this allows    for easy data management and modular design allows for extention to be added within nodes or entire new nodes to be added (New diagonstics medium).
 
   The pipeline folder is just what data is sent where and why for each node. Most likey is that unified data and evaulations will be sent to that   specific nodes ui as well as up to the Orchestrator (for overview + systemic interations).
+
+### to do 
+1. **Update the frontend now** to call the new commands — but the response shapes have changed too (OutputContract vs raw Python JSON), so the frontend parsing logic needs reworking
+2. **Leave it broken** and update the frontend alongside each node implementation, since the response data will evolve as you build real logic
+
+Beyond that, a couple of minor things:
+
+- `tauri-plugin-shell` in Cargo.toml — was it used for anything other than the old Python calls? The current code uses `std::process::Command` directly, not the plugin. Could be dead weight.
+- Tests — no unit tests exist yet. The trait and types are testable now, but probably better to add tests alongside real implementations rather than testing stubs.

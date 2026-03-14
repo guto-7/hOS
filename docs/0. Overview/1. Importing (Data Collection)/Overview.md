@@ -11,7 +11,7 @@ The first layer of every node's pipeline. Importing defines how raw diagnostic d
 **1. [Data Types](1.%20Determining%20Data%20Types.md)**
 What diagnostic data and sub-mediums does this node accept? This requires research into the most common data formats for that domain, why they are the standard, and — for domains with multiple sub-mediums (e.g., radiology encompasses X-ray, MRI, CT) — which are included and how they are categorised.
 
-**2. [Limitations](2.%20Limitations.md)**
+**2. [Limitations](0.%20Overview/1.%20Importing%20(Data%20Collection)/2.%20Limitations.md)**
 What data is explicitly not accepted and why. Defining boundaries early prevents scope creep and ensures the node's downstream layers (Evaluation, Insight) are only working with data they can reliably process.
 
 **3. [Formatting Raw Data](3.%20Formatting%20Raw%20Data.md)**

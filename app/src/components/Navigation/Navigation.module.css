@@ -1,0 +1,68 @@
+/* ── Node selector graph ── */
+
+.viewport {
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+}
+
+.canvasSvg {
+  display: block;
+}
+
+/* Edges */
+.edge {
+  stroke: rgba(0, 255, 200, 0.12);
+  stroke-width: 1;
+  fill: none;
+}
+
+/* Nodes */
+.node {
+  fill: #00e5c0;
+  cursor: pointer;
+  transform-origin: center;
+  transform-box: fill-box;
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.node:hover,
+.nodeHovered {
+  transform: scale(1.25);
+  filter: drop-shadow(0 0 10px rgba(0, 229, 192, 0.6));
+}
+
+.nodeOrchestrator {
+  fill: #00e5c0;
+}
+
+.nodeActive {
+  filter:
+    drop-shadow(0 0 12px rgba(255, 255, 255, 0.7))
+    drop-shadow(0 0 36px rgba(255, 255, 255, 0.25))
+    drop-shadow(0 0 72px rgba(255, 255, 255, 0.1));
+  stroke: rgba(255, 255, 255, 0.6);
+  stroke-width: 2;
+}
+
+/* Labels */
+.labelLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.nodeLabel {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: var(--text-xs, 12px);
+  color: var(--text-muted, #6b6b6b);
+  white-space: nowrap;
+  text-align: center;
+}
+
+.orchestratorLabel {
+  color: var(--text-secondary, #9a9a9a);
+  font-weight: var(--weight-medium, 500);
+}

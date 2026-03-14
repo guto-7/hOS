@@ -29,6 +29,9 @@ The only constraint is the deterministic principle: whatever method is used, sam
 
 ### What This Layer Defines
 
+**0. [Data Routing](0.%20Data%20Routing.md)**
+Before any evaluation runs, unified data must be routed to the correct analysis engines in the format each one requires. Different engines need different input shapes — routing transforms the representation without altering the data.
+
 #### Each node must define four things at the Evaluation stage:
 
 **1. [General Analysis](1.%20General%20Analysis.md)**

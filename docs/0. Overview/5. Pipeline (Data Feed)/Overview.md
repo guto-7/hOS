@@ -6,6 +6,9 @@ The fifth layer of every node's pipeline. Pipeline defines what data leaves the 
 
 ### What This Layer Defines
 
+**0. [History & Longitudinal Tracking](0.%20History%20&%20Longitudinal%20Tracking.md)**
+How time is handled across the pipeline. Collection dates are a required field from import through to output — making longitudinal tracking a query pattern built into existing data, not a separate system. This is foundational context for everything else in this layer.
+
 #### Each node must define four things at the Pipeline stage:
 
 **1. [Data Storage](1.%20Data%20Storage.md)**
