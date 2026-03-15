@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import type { NodeContentProps } from "../registry";
 import styles from "./AnthropometryContent.module.css";
 
 /* ── Types ── */
@@ -13,7 +14,7 @@ interface DeviationMetric {
   deviation_fraction: number | null;
 }
 
-interface BodyCompositionMarker {
+interface AnthropometryMarker {
   name: string;
   original_name: string | null;
   category: string | null;
@@ -65,8 +66,8 @@ interface PythonEvaluation {
   missing_for_full_eval: string[];
 }
 
-interface BodyCompositionData {
-  markers: BodyCompositionMarker[];
+interface AnthropometryData {
+  markers: AnthropometryMarker[];
   validation: {
     status: string | { Warning: string } | { NeedsResolution: string };
     field_issues: { field: string; issue: string }[];
@@ -104,7 +105,7 @@ interface OutputContract {
   schema_version: string;
   produced_at: string;
   collection_date: string | null;
-  unified_data: BodyCompositionData;
+  unified_data: AnthropometryData;
   evaluation: EvaluationOutput;
   metadata: ContractMetadata;
 }
@@ -153,7 +154,7 @@ const COLOR_CLASS: Record<string, string> = {
   grey:   styles.flagGrey,
 };
 
-function getFlagDisplay(m: BodyCompositionMarker): [string, string] {
+function getFlagDisplay(m: AnthropometryMarker): [string, string] {
   const { flag } = m.deviation;
   if (flag === "Critical") return ["Critical", "red"];
   if (m.canonical_tier) {
@@ -168,7 +169,7 @@ function getFlagDisplay(m: BodyCompositionMarker): [string, string] {
   return ["—", "grey"];
 }
 
-function getRangeDisplay(m: BodyCompositionMarker): string {
+function getRangeDisplay(m: AnthropometryMarker): string {
   const { reference_low: low, reference_high: high } = m.deviation;
   if (low === null && high === null) return "—";
   if (low === null)  return `< ${high}`;
@@ -176,7 +177,7 @@ function getRangeDisplay(m: BodyCompositionMarker): string {
   return `${low} – ${high}`;
 }
 
-function hasResolvedRange(m: BodyCompositionMarker): boolean {
+function hasResolvedRange(m: AnthropometryMarker): boolean {
   return (
     m.canonical_tier !== null ||
     m.deviation.reference_low !== null ||
@@ -184,7 +185,7 @@ function hasResolvedRange(m: BodyCompositionMarker): boolean {
   );
 }
 
-function isConcerning(m: BodyCompositionMarker): boolean {
+function isConcerning(m: AnthropometryMarker): boolean {
   const { flag } = m.deviation;
   if (flag === "Critical" || flag === "Low" || flag === "High") return true;
   if (m.canonical_tier) {
@@ -197,15 +198,15 @@ function isConcerning(m: BodyCompositionMarker): boolean {
 /* ── Bucketing ── */
 
 interface Buckets {
-  evaluated: BodyCompositionMarker[];
-  unresolved: BodyCompositionMarker[];
-  raw: BodyCompositionMarker[];
+  evaluated: AnthropometryMarker[];
+  unresolved: AnthropometryMarker[];
+  raw: AnthropometryMarker[];
 }
 
-function bucketMarkers(markers: BodyCompositionMarker[]): Buckets {
-  const evaluated: BodyCompositionMarker[] = [];
-  const unresolved: BodyCompositionMarker[] = [];
-  const raw: BodyCompositionMarker[] = [];
+function bucketMarkers(markers: AnthropometryMarker[]): Buckets {
+  const evaluated: AnthropometryMarker[] = [];
+  const unresolved: AnthropometryMarker[] = [];
+  const raw: AnthropometryMarker[] = [];
   for (const m of markers) {
     if (m.evaluation_type === "direct") {
       if (hasResolvedRange(m)) evaluated.push(m);
@@ -227,14 +228,14 @@ const CATEGORY_ORDER = [
   "Segmental Analysis",
 ];
 
-function groupByCategory(markers: BodyCompositionMarker[]): [string, BodyCompositionMarker[]][] {
-  const grouped: Record<string, BodyCompositionMarker[]> = {};
+function groupByCategory(markers: AnthropometryMarker[]): [string, AnthropometryMarker[]][] {
+  const grouped: Record<string, AnthropometryMarker[]> = {};
   for (const m of markers) {
     const cat = m.category ?? "Other";
     if (!grouped[cat]) grouped[cat] = [];
     grouped[cat].push(m);
   }
-  const ordered: [string, BodyCompositionMarker[]][] = [];
+  const ordered: [string, AnthropometryMarker[]][] = [];
   for (const cat of CATEGORY_ORDER) {
     if (grouped[cat]) ordered.push([cat, grouped[cat]]);
   }
@@ -280,7 +281,7 @@ const SEVERITY_COLOR: Record<string, string> = {
 
 /* ── Component ── */
 
-function AnthropometryContent() {
+function AnthropometryContent({ onHistoryChange, onActiveLabel, historyRef, deleteRef, resetRef }: NodeContentProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [status, setStatus] = useState<ProcessingStatus>("loading");
@@ -288,7 +289,6 @@ function AnthropometryContent() {
   const [contract, setContract] = useState<OutputContract | null>(null);
   const [currentFile, setCurrentFile] = useState<string>("");
   const [history, setHistory] = useState<HistoryRecord[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
 
   // Profile state — optional; passed to pipeline for demographic adjustment
   const [profileSex, setProfileSex] = useState<"" | "male" | "female">("");
@@ -305,7 +305,7 @@ function AnthropometryContent() {
 
   const loadHistory = useCallback(async () => {
     try {
-      const jsonString = await invoke<string>("list_body_composition");
+      const jsonString = await invoke<string>("list_anthropometry");
       const records: HistoryRecord[] = JSON.parse(jsonString);
       setHistory(records);
       return records;
@@ -316,17 +316,79 @@ function AnthropometryContent() {
 
   const loadResult = useCallback(async (hash: string, fileName: string) => {
     try {
-      const jsonString = await invoke<string>("load_body_composition", { sourceHash: hash });
+      const jsonString = await invoke<string>("load_anthropometry", { sourceHash: hash });
       const parsed: OutputContract = JSON.parse(jsonString);
       setContract(parsed);
       setCurrentFile(fileName);
       setStatus("done");
-      setShowHistory(false);
     } catch (err) {
       setErrorMsg(String(err));
       setStatus("error");
     }
   }, []);
+
+  // Report history to parent whenever it changes
+  useEffect(() => {
+    onHistoryChange?.(
+      history.map((r) => ({
+        id: r.source_hash,
+        label: r.original_name ?? "Unknown",
+        detail: r.collection_date
+          ? `${r.collection_date} · ${r.critical_flags_count > 0 ? `${r.critical_flags_count} critical` : "No critical flags"}`
+          : r.critical_flags_count > 0 ? `${r.critical_flags_count} critical` : "No critical flags",
+      }))
+    );
+  }, [history, onHistoryChange]);
+
+  // Report active result label to parent
+  useEffect(() => {
+    if (contract?.produced_at) {
+      const ts = Number(contract.produced_at);
+      const d = ts > 0 ? new Date(ts * 1000) : new Date(contract.produced_at);
+      onActiveLabel?.(isNaN(d.getTime()) ? null : d.toLocaleDateString());
+    } else {
+      onActiveLabel?.(null);
+    }
+  }, [contract, onActiveLabel]);
+
+  // Expose loadResult to parent via ref
+  useEffect(() => {
+    if (historyRef) {
+      historyRef.current = (id: string) => {
+        const record = history.find((r) => r.source_hash === id);
+        if (record) {
+          loadResult(record.source_hash, record.original_name ?? "Unknown");
+        }
+      };
+    }
+  }, [historyRef, history, loadResult]);
+
+  // Expose delete to parent via ref
+  useEffect(() => {
+    if (deleteRef) {
+      deleteRef.current = async (id: string) => {
+        await invoke("delete_anthropometry", { sourceHash: id });
+        const records = await loadHistory();
+        if (contract?.metadata.source_hash === id) {
+          if (records.length > 0) {
+            const latest = records[0];
+            loadResult(latest.source_hash, latest.original_name ?? "Unknown");
+          } else {
+            setContract(null);
+            setCurrentFile("");
+            setStatus("idle");
+          }
+        }
+      };
+    }
+  }, [deleteRef, loadHistory, loadResult, contract]);
+
+  // Expose reset to parent via ref
+  useEffect(() => {
+    if (resetRef) {
+      resetRef.current = reset;
+    }
+  });
 
   useEffect(() => {
     loadHistory().then((records) => {
@@ -344,7 +406,6 @@ function AnthropometryContent() {
     setErrorMsg("");
     setCurrentFile(file.name);
     setContract(null);
-    setShowHistory(false);
 
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -355,7 +416,7 @@ function AnthropometryContent() {
       const currentAge = profileAgeRef.current ? parseInt(profileAgeRef.current, 10) : null;
       const currentHeight = profileHeightRef.current ? parseFloat(profileHeightRef.current) : null;
 
-      const jsonString = await invoke<string>("run_body_composition", {
+      const jsonString = await invoke<string>("run_anthropometry", {
         fileName: file.name,
         fileBytes: bytes,
         sex: currentSex,
@@ -407,13 +468,11 @@ function AnthropometryContent() {
     setContract(null);
     setErrorMsg("");
     setCurrentFile("");
-    setShowHistory(false);
   };
 
   const allMarkers = contract?.unified_data.markers ?? [];
   const { evaluated, unresolved, raw } = bucketMarkers(allMarkers);
   const grouped = groupByCategory(evaluated);
-  const concerningCount = evaluated.filter(isConcerning).length;
   const criticalFlags = contract?.evaluation.critical_flags ?? [];
   const pyEval = contract?.unified_data.python_evaluation ?? null;
 
@@ -427,34 +486,6 @@ function AnthropometryContent() {
 
       {status === "idle" && (
         <>
-          {history.length > 0 && (
-            <div className={styles.historyBar}>
-              <span className={styles.historyLabel}>
-                {history.length} past upload{history.length > 1 ? "s" : ""} available
-              </span>
-              <button className={styles.historyButton} onClick={() => setShowHistory(!showHistory)}>
-                {showHistory ? "Hide history" : "View history"}
-              </button>
-            </div>
-          )}
-          {showHistory && history.length > 0 && (
-            <div className={styles.historyList}>
-              {history.map((r) => (
-                <button
-                  key={r.source_hash}
-                  className={styles.historyItem}
-                  onClick={() => loadResult(r.source_hash, r.original_name ?? "Unknown")}
-                >
-                  <span className={styles.historyName}>{r.original_name ?? "Unknown"}</span>
-                  <span className={styles.historyMeta}>
-                    {r.collection_date && `${r.collection_date} · `}
-                    {r.critical_flags_count > 0 ? `${r.critical_flags_count} critical` : "No critical flags"}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* Profile inputs */}
           <div className={styles.profileRow}>
             <label className={styles.profileField}>
@@ -533,7 +564,7 @@ function AnthropometryContent() {
               </svg>
             </div>
             <p className={styles.dropzoneText}>
-              Drop your body composition PDF here, or{" "}
+              Drop your anthropometry PDF here, or{" "}
               <span className={styles.dropzoneLink}>browse files</span>
             </p>
             <p className={styles.dropzoneHint}>InBody, Tanita, or other BIA report PDFs</p>
@@ -558,43 +589,6 @@ function AnthropometryContent() {
 
       {status === "done" && contract && (
         <>
-          {/* Summary bar */}
-          <div className={styles.summaryBar}>
-            <span className={styles.summaryFile}>{currentFile}</span>
-            <span className={styles.summaryStats}>
-              {evaluated.length} evaluated &middot;{" "}
-              {concerningCount > 0 ? `${concerningCount} flagged` : "all clear"}
-            </span>
-            <div className={styles.summaryActions}>
-              {history.length > 1 && (
-                <button className={styles.historyToggle} onClick={() => setShowHistory(!showHistory)}>
-                  History ({history.length})
-                </button>
-              )}
-              <button className={styles.uploadAnother} onClick={reset}>Upload new</button>
-            </div>
-          </div>
-
-          {/* History dropdown */}
-          {showHistory && history.length > 0 && (
-            <div className={styles.historyList}>
-              {history.map((r) => (
-                <button
-                  key={r.source_hash}
-                  className={`${styles.historyItem} ${contract.metadata.source_hash === r.source_hash ? styles.historyItemActive : ""}`}
-                  onClick={() => loadResult(r.source_hash, r.original_name ?? "Unknown")}
-                >
-                  <span className={styles.historyName}>{r.original_name ?? "Unknown"}</span>
-                  <span className={styles.historyMeta}>
-                    {r.collection_date && `${r.collection_date} · `}
-                    {r.critical_flags_count > 0 ? `${r.critical_flags_count} critical` : "No critical flags"}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Critical banner */}
           {criticalFlags.length > 0 && (
             <div className={styles.warningBanner}>
               <strong>{criticalFlags.length} critical flag{criticalFlags.length > 1 ? "s" : ""}:</strong>

@@ -1,10 +1,12 @@
 use std::fs;
 use std::process::Command;
 
-use crate::nodes::anthropometry::import::BodyCompositionInput;
+use crate::nodes::anthropometry::import::AnthropometryInput;
 use crate::nodes::anthropometry::AnthropometryNode;
-use crate::nodes::bloodwork::import::BloodworkInput;
-use crate::nodes::bloodwork::BloodworkNode;
+use crate::nodes::hepatology::import::HepatologyInput;
+use crate::nodes::hepatology::HepatologyNode;
+use crate::nodes::radiology::import::RadiologyInput;
+use crate::nodes::radiology::RadiologyNode;
 use crate::orchestrator::{OrchestratorInput, OrchestratorNode};
 use crate::pipeline::storage::{FsNodeStorage, NodeStorage};
 use crate::pipeline::types::OutputContract;
@@ -12,12 +14,12 @@ use crate::pipeline::{self, Node};
 use crate::util;
 
 // ---------------------------------------------------------------------------
-// Bloodwork commands
+// Hepatology commands
 // ---------------------------------------------------------------------------
 
-/// Run the full bloodwork pipeline on an uploaded PDF.
+/// Run the full hepatology pipeline on an uploaded PDF.
 #[tauri::command]
-pub async fn run_bloodwork(
+pub async fn run_hepatology(
     file_name: String,
     file_bytes: Vec<u8>,
     sex: Option<String>,
@@ -26,8 +28,8 @@ pub async fn run_bloodwork(
     cycle_phase: Option<String>,
     fasting: Option<bool>,
 ) -> Result<String, String> {
-    let node = BloodworkNode;
-    let input = BloodworkInput {
+    let node = HepatologyNode;
+    let input = HepatologyInput {
         file_name,
         file_bytes,
         sex,
@@ -48,11 +50,11 @@ pub async fn run_bloodwork(
     serde_json::to_string(&contract).map_err(|e| e.to_string())
 }
 
-/// List all stored bloodwork results (metadata only).
+/// List all stored hepatology results (metadata only).
 #[tauri::command]
-pub async fn list_bloodwork() -> Result<String, String> {
+pub async fn list_hepatology() -> Result<String, String> {
     let base_dir = util::data_dir()?;
-    let storage = FsNodeStorage::new(&base_dir, "bloodwork").map_err(|e| e.to_string())?;
+    let storage = FsNodeStorage::new(&base_dir, "hepatology").map_err(|e| e.to_string())?;
 
     let hashes = storage.list_contracts().map_err(|e| e.to_string())?;
 
@@ -74,11 +76,11 @@ pub async fn list_bloodwork() -> Result<String, String> {
     serde_json::to_string(&summaries).map_err(|e| e.to_string())
 }
 
-/// Load a specific bloodwork result by source hash.
+/// Load a specific hepatology result by source hash.
 #[tauri::command]
-pub async fn load_bloodwork(source_hash: String) -> Result<String, String> {
+pub async fn load_hepatology(source_hash: String) -> Result<String, String> {
     let base_dir = util::data_dir()?;
-    let storage = FsNodeStorage::new(&base_dir, "bloodwork").map_err(|e| e.to_string())?;
+    let storage = FsNodeStorage::new(&base_dir, "hepatology").map_err(|e| e.to_string())?;
 
     let contract = storage
         .load_contract(&source_hash)
@@ -87,11 +89,23 @@ pub async fn load_bloodwork(source_hash: String) -> Result<String, String> {
     serde_json::to_string(&contract).map_err(|e| e.to_string())
 }
 
+/// Delete a stored hepatology result by source hash.
+#[tauri::command]
+pub async fn delete_hepatology(source_hash: String) -> Result<(), String> {
+    let base_dir = util::data_dir()?;
+    let storage = FsNodeStorage::new(&base_dir, "hepatology").map_err(|e| e.to_string())?;
+    storage
+        .delete_contract(&source_hash)
+        .map_err(|e| e.to_string())
+}
+
 // ---------------------------------------------------------------------------
-// Imaging commands (delegate to Python scripts)
+// Radiology commands
 // ---------------------------------------------------------------------------
 
-/// Run imaging Stage 1 (Importing) — validate, store, extract metadata.
+/// Pre-pipeline: Stage 1 only — validate, store, extract metadata, detect body part.
+/// This is NOT part of the Node trait pipeline. It gives the user a chance to
+/// review metadata and select a model before committing to the full pipeline.
 #[tauri::command]
 pub async fn extract_image(file_name: String, file_bytes: Vec<u8>) -> Result<String, String> {
     let data = util::data_dir()?;
@@ -113,83 +127,72 @@ pub async fn extract_image(file_name: String, file_bytes: Vec<u8>) -> Result<Str
         .arg("--stage1-only")
         .arg("--detect-body-part")
         .output()
-        .map_err(|e| format!("Failed to run imaging pipeline: {e}"))?;
+        .map_err(|e| format!("Failed to run radiology pipeline: {e}"))?;
 
     let _ = fs::remove_file(&image_path);
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Imaging pipeline failed: {stderr}"));
+        return Err(format!("Radiology pipeline failed: {stderr}"));
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-/// Run full imaging pipeline (Stage 1 + Stage 2 + model inference).
+/// Run the full radiology pipeline (import → unify → evaluate → output).
 #[tauri::command]
-pub async fn process_image(
+pub async fn run_radiology(
     file_name: String,
     file_bytes: Vec<u8>,
     model: String,
 ) -> Result<String, String> {
-    let data = util::data_dir()?;
+    let node = RadiologyNode;
+    let input = RadiologyInput {
+        file_name,
+        file_bytes,
+        model,
+    };
 
-    let tmp_dir = data.join("tmp");
-    fs::create_dir_all(&tmp_dir).map_err(|e| format!("Failed to create tmp dir: {e}"))?;
-    let image_path = tmp_dir.join(&file_name);
-    fs::write(&image_path, &file_bytes).map_err(|e| format!("Failed to save image: {e}"))?;
+    let contract = pipeline::run_pipeline(&node, input).map_err(|e| e.to_string())?;
 
-    let script = util::find_script("run_imaging.py")?;
-    let python = util::find_venv_python(&script)?;
+    let base_dir = util::data_dir()?;
+    let storage =
+        FsNodeStorage::new(&base_dir, node.node_id()).map_err(|e| e.to_string())?;
+    storage.store_contract(&contract).map_err(|e| e.to_string())?;
 
-    let output = Command::new(&python)
-        .arg(&script)
-        .arg(image_path.to_str().unwrap())
-        .arg("--output-dir")
-        .arg(data.to_str().unwrap())
-        .arg("--json-stdout")
-        .arg("--model")
-        .arg(&model)
-        .output()
-        .map_err(|e| format!("Failed to run imaging pipeline: {e}"))?;
-
-    let _ = fs::remove_file(&image_path);
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Imaging pipeline failed: {stderr}"));
-    }
-
-    let json_output = String::from_utf8_lossy(&output.stdout).to_string();
-
-    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&json_output) {
-        if let Some(hash) = parsed
-            .get("record")
-            .and_then(|r| r.get("file_hash"))
-            .and_then(|h| h.as_str())
-        {
-            let results_dir = data.join("results").join("imaging");
-            let _ = fs::create_dir_all(&results_dir);
-            let result_path = results_dir.join(format!("{hash}.json"));
-            let _ = fs::write(&result_path, &json_output);
-        }
-    }
-
-    Ok(json_output)
+    serde_json::to_string(&contract).map_err(|e| e.to_string())
 }
 
-/// Run Stage 3: Claude API interpretation on a saved imaging result.
+/// Post-pipeline: Claude API interpretation. Loads the stored contract,
+/// calls Python for interpretation, patches the contract, and re-stores.
 #[tauri::command]
-pub async fn interpret_image(file_hash: String) -> Result<String, String> {
-    let data = util::data_dir()?;
-    let result_path = data
-        .join("results")
-        .join("imaging")
-        .join(format!("{file_hash}.json"));
+pub async fn interpret_image(source_hash: String) -> Result<String, String> {
+    let base_dir = util::data_dir()?;
+    let storage =
+        FsNodeStorage::new(&base_dir, "radiology").map_err(|e| e.to_string())?;
+    let mut contract = storage
+        .load_contract(&source_hash)
+        .map_err(|e| e.to_string())?;
 
-    if !result_path.exists() {
-        return Err(format!("No saved result for hash {file_hash}"));
-    }
+    // Build a result-like JSON for run_interpret.py (it expects the raw Python output shape)
+    let ud = &contract.unified_data;
+    let temp_result = serde_json::json!({
+        "record": { "stored_path": ud.get("stored_path").and_then(|v| v.as_str()).unwrap_or("") },
+        "heatmap": ud.get("heatmap").cloned().unwrap_or(serde_json::Value::Null),
+        "findings": ud.get("findings").cloned().unwrap_or(serde_json::json!([])),
+        "summary": ud.get("summary").cloned().unwrap_or(serde_json::json!({})),
+        "model_key": ud.get("model_key").cloned().unwrap_or(serde_json::json!("unknown")),
+        "image_metadata": ud.get("image_metadata").cloned().unwrap_or(serde_json::json!({})),
+    });
+
+    let tmp_dir = base_dir.join("tmp");
+    fs::create_dir_all(&tmp_dir).map_err(|e| format!("Failed to create tmp dir: {e}"))?;
+    let tmp_path = tmp_dir.join(format!("{source_hash}_interpret.json"));
+    fs::write(
+        &tmp_path,
+        serde_json::to_string(&temp_result).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| format!("Failed to write temp result: {e}"))?;
 
     let script = util::find_script("run_interpret.py")?;
     let python = util::find_venv_python(&script)?;
@@ -197,10 +200,12 @@ pub async fn interpret_image(file_hash: String) -> Result<String, String> {
     let output = Command::new(&python)
         .arg(&script)
         .arg("--result-path")
-        .arg(result_path.to_str().unwrap())
+        .arg(tmp_path.to_str().unwrap())
         .arg("--json-stdout")
         .output()
         .map_err(|e| format!("Failed to run interpretation: {e}"))?;
+
+    let _ = fs::remove_file(&tmp_path);
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -209,6 +214,7 @@ pub async fn interpret_image(file_hash: String) -> Result<String, String> {
 
     let json_output = String::from_utf8_lossy(&output.stdout).to_string();
 
+    // Patch contract with interpretation and re-store
     if let Ok(interp) = serde_json::from_str::<serde_json::Value>(&json_output) {
         if interp
             .get("success")
@@ -216,26 +222,10 @@ pub async fn interpret_image(file_hash: String) -> Result<String, String> {
             .unwrap_or(false)
         {
             if let Some(interpretation) = interp.get("interpretation") {
-                let saved = data
-                    .join("results")
-                    .join("imaging")
-                    .join(format!("{file_hash}.json"));
-                if let Ok(content) = fs::read_to_string(&saved) {
-                    if let Ok(mut parsed) =
-                        serde_json::from_str::<serde_json::Value>(&content)
-                    {
-                        if let Some(obj) = parsed.as_object_mut() {
-                            obj.insert(
-                                "interpretation".to_string(),
-                                interpretation.clone(),
-                            );
-                        }
-                        let _ = fs::write(
-                            &saved,
-                            serde_json::to_string(&parsed).unwrap_or_default(),
-                        );
-                    }
+                if let Some(obj) = contract.unified_data.as_object_mut() {
+                    obj.insert("interpretation".to_string(), interpretation.clone());
                 }
+                let _ = storage.store_contract(&contract);
             }
         }
     }
@@ -243,76 +233,61 @@ pub async fn interpret_image(file_hash: String) -> Result<String, String> {
     Ok(json_output)
 }
 
-/// List all saved imaging results (metadata only).
+/// List all stored radiology results (metadata only).
 #[tauri::command]
-pub async fn list_imaging_results() -> Result<String, String> {
-    let data = util::data_dir()?;
-    let results_dir = data.join("results").join("imaging");
+pub async fn list_radiology() -> Result<String, String> {
+    let base_dir = util::data_dir()?;
+    let storage = FsNodeStorage::new(&base_dir, "radiology").map_err(|e| e.to_string())?;
 
-    if !results_dir.exists() {
-        return Ok("[]".to_string());
-    }
+    let hashes = storage.list_contracts().map_err(|e| e.to_string())?;
 
-    let mut records: Vec<serde_json::Value> = Vec::new();
-
-    let entries = fs::read_dir(&results_dir).map_err(|e| e.to_string())?;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().map_or(false, |ext| ext == "json") {
-            if let Ok(content) = fs::read_to_string(&path) {
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
-                    let record = parsed
-                        .get("record")
-                        .cloned()
-                        .unwrap_or(serde_json::Value::Null);
-                    let summary = parsed
-                        .get("summary")
-                        .cloned()
-                        .unwrap_or(serde_json::Value::Null);
-                    let meta = parsed
-                        .get("image_metadata")
-                        .cloned()
-                        .unwrap_or(serde_json::Value::Null);
-                    records.push(serde_json::json!({
-                        "file_hash": record.get("file_hash"),
-                        "original_name": record.get("original_name"),
-                        "width": meta.get("width"),
-                        "height": meta.get("height"),
-                        "format": meta.get("format"),
-                        "flagged_count": summary.get("flagged_count"),
-                        "total_screened": summary.get("total_pathologies_screened"),
-                    }));
-                }
-            }
+    let mut summaries: Vec<serde_json::Value> = Vec::new();
+    for hash in &hashes {
+        if let Ok(contract) = storage.load_contract(hash) {
+            summaries.push(serde_json::json!({
+                "source_hash": contract.metadata.source_hash,
+                "original_name": contract.metadata.original_name,
+                "collection_date": contract.collection_date,
+                "node_id": contract.node_id,
+                "critical_flags_count": contract.evaluation.critical_flags.len(),
+                "certainty_grade": format!("{:?}", contract.evaluation.certainty.grade),
+            }));
         }
     }
 
-    serde_json::to_string(&records).map_err(|e| e.to_string())
+    serde_json::to_string(&summaries).map_err(|e| e.to_string())
 }
 
-/// Load a specific saved imaging result by file hash.
+/// Load a specific radiology result by source hash.
 #[tauri::command]
-pub async fn load_imaging_result(file_hash: String) -> Result<String, String> {
-    let data = util::data_dir()?;
-    let result_path = data
-        .join("results")
-        .join("imaging")
-        .join(format!("{file_hash}.json"));
+pub async fn load_radiology(source_hash: String) -> Result<String, String> {
+    let base_dir = util::data_dir()?;
+    let storage = FsNodeStorage::new(&base_dir, "radiology").map_err(|e| e.to_string())?;
 
-    if !result_path.exists() {
-        return Err(format!("No saved result for hash {file_hash}"));
-    }
+    let contract = storage
+        .load_contract(&source_hash)
+        .map_err(|e| e.to_string())?;
 
-    fs::read_to_string(&result_path).map_err(|e| format!("Failed to read result: {e}"))
+    serde_json::to_string(&contract).map_err(|e| e.to_string())
+}
+
+/// Delete a stored radiology result by source hash.
+#[tauri::command]
+pub async fn delete_radiology(source_hash: String) -> Result<(), String> {
+    let base_dir = util::data_dir()?;
+    let storage = FsNodeStorage::new(&base_dir, "radiology").map_err(|e| e.to_string())?;
+    storage
+        .delete_contract(&source_hash)
+        .map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
-// Body Composition commands
+// Anthropometry commands
 // ---------------------------------------------------------------------------
 
-/// Run the full body composition pipeline on an uploaded BIA PDF.
+/// Run the full anthropometry pipeline on an uploaded BIA PDF.
 #[tauri::command]
-pub async fn run_body_composition(
+pub async fn run_anthropometry(
     file_name: String,
     file_bytes: Vec<u8>,
     sex: Option<String>,
@@ -320,7 +295,7 @@ pub async fn run_body_composition(
     height_cm: Option<f64>,
 ) -> Result<String, String> {
     let node = AnthropometryNode;
-    let input = BodyCompositionInput {
+    let input = AnthropometryInput {
         file_name,
         file_bytes,
         sex,
@@ -339,9 +314,9 @@ pub async fn run_body_composition(
     serde_json::to_string(&contract).map_err(|e| e.to_string())
 }
 
-/// List all stored body composition results (metadata only).
+/// List all stored anthropometry results (metadata only).
 #[tauri::command]
-pub async fn list_body_composition() -> Result<String, String> {
+pub async fn list_anthropometry() -> Result<String, String> {
     let base_dir = util::data_dir()?;
     let storage =
         FsNodeStorage::new(&base_dir, "anthropometry").map_err(|e| e.to_string())?;
@@ -366,9 +341,9 @@ pub async fn list_body_composition() -> Result<String, String> {
     serde_json::to_string(&summaries).map_err(|e| e.to_string())
 }
 
-/// Load a specific body composition result by source hash.
+/// Load a specific anthropometry result by source hash.
 #[tauri::command]
-pub async fn load_body_composition(source_hash: String) -> Result<String, String> {
+pub async fn load_anthropometry(source_hash: String) -> Result<String, String> {
     let base_dir = util::data_dir()?;
     let storage =
         FsNodeStorage::new(&base_dir, "anthropometry").map_err(|e| e.to_string())?;
@@ -378,6 +353,17 @@ pub async fn load_body_composition(source_hash: String) -> Result<String, String
         .map_err(|e| e.to_string())?;
 
     serde_json::to_string(&contract).map_err(|e| e.to_string())
+}
+
+/// Delete a stored anthropometry result by source hash.
+#[tauri::command]
+pub async fn delete_anthropometry(source_hash: String) -> Result<(), String> {
+    let base_dir = util::data_dir()?;
+    let storage =
+        FsNodeStorage::new(&base_dir, "anthropometry").map_err(|e| e.to_string())?;
+    storage
+        .delete_contract(&source_hash)
+        .map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -392,7 +378,7 @@ pub async fn run_orchestrator() -> Result<String, String> {
     // Collect the latest contract from each node that has results
     let mut contracts: Vec<OutputContract> = Vec::new();
 
-    let node_ids = ["bloodwork", "radiology", "anthropometry"];
+    let node_ids = ["hepatology", "radiology", "anthropometry"];
     for node_id in &node_ids {
         let storage = match FsNodeStorage::new(&base_dir, node_id) {
             Ok(s) => s,

@@ -1,3 +1,3 @@
 pub mod anthropometry;
-pub mod bloodwork;
+pub mod hepatology;
 pub mod radiology;

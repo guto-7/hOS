@@ -10,18 +10,21 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
-            commands::run_bloodwork,
-            commands::list_bloodwork,
-            commands::load_bloodwork,
+            commands::run_hepatology,
+            commands::list_hepatology,
+            commands::load_hepatology,
+            commands::delete_hepatology,
             commands::run_orchestrator,
             commands::extract_image,
-            commands::process_image,
+            commands::run_radiology,
             commands::interpret_image,
-            commands::list_imaging_results,
-            commands::load_imaging_result,
-            commands::run_body_composition,
-            commands::list_body_composition,
-            commands::load_body_composition,
+            commands::list_radiology,
+            commands::load_radiology,
+            commands::delete_radiology,
+            commands::run_anthropometry,
+            commands::list_anthropometry,
+            commands::load_anthropometry,
+            commands::delete_anthropometry,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

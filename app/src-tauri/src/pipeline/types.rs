@@ -10,7 +10,7 @@ use std::collections::HashMap;
 /// the boundary where dates are ingested.
 pub type CollectionDate = String;
 
-/// Unique identifier for a node (e.g. "bloodwork", "radiology").
+/// Unique identifier for a node (e.g. "hepatology", "radiology").
 pub type NodeId = String;
 
 // ---------------------------------------------------------------------------
@@ -29,7 +29,7 @@ pub struct RawData {
     /// When the sample/scan/measurement was collected (not when it was imported).
     pub collection_date: Option<CollectionDate>,
     /// The raw extracted content — structure depends on the node.
-    /// Bloodwork: extracted text. Imaging: metadata + pixel path. Etc.
+    /// Hepatology: extracted text. Radiology: metadata + findings. Etc.
     pub content: serde_json::Value,
 }
 

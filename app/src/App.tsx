@@ -2,21 +2,23 @@ import { useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import Navigation from "./components/Navigation/Navigation";
 import Dashboard from "./tabs/Dashboard/Dashboard";
-import Chat from "./tabs/Chat/Chat";
 import Disclaimer from "./components/Disclaimer/Disclaimer";
+import { getNode } from "./nodes/registry";
 import styles from "./App.module.css";
 
-type ViewId = "dashboard" | "navigation" | "chat";
+type ViewId = "dashboard" | "navigation";
 
 const VIEWS: { id: ViewId; label: string }[] = [
   { id: "dashboard", label: "Dashboard" },
   { id: "navigation", label: "Navigation" },
-  { id: "chat", label: "Chat" },
 ];
 
 function App() {
-  const [activeNodeId, setActiveNodeId] = useState("bloodwork");
+  const [activeNodeId, setActiveNodeId] = useState("hepatology");
   const [activeView, setActiveView] = useState<ViewId>("navigation");
+
+  const activeNode = getNode(activeNodeId);
+  const nodeTitle = activeNode?.title ?? activeNodeId;
 
   const handleDrag = (e: React.MouseEvent) => {
     if (e.button === 0 && (e.target as HTMLElement).tagName !== "BUTTON") {
@@ -40,13 +42,13 @@ function App() {
             </button>
           ))}
         </nav>
+        <span className={styles.nodeLabel}>{nodeTitle}</span>
       </header>
       <main className={`${styles.content} ${activeView === "navigation" ? styles.contentFull : ""}`} role="tabpanel">
         {activeView === "navigation" && (
           <Navigation activeNodeId={activeNodeId} onNodeChange={setActiveNodeId} />
         )}
         {activeView === "dashboard" && <Dashboard activeNodeId={activeNodeId} />}
-        {activeView === "chat" && <Chat activeNodeId={activeNodeId} />}
       </main>
       <Disclaimer />
     </div>

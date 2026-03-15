@@ -5,8 +5,8 @@ use crate::pipeline::error::PipelineError;
 use crate::pipeline::types::RawData;
 use crate::util;
 
-/// Input to the body composition Import layer: a BIA PDF file plus optional user profile.
-pub struct BodyCompositionInput {
+/// Input to the anthropometry Import layer: a BIA PDF file plus optional user profile.
+pub struct AnthropometryInput {
     pub file_name: String,
     pub file_bytes: Vec<u8>,
     pub sex: Option<String>,
@@ -14,8 +14,8 @@ pub struct BodyCompositionInput {
     pub height_cm: Option<f64>,
 }
 
-/// Import a body composition PDF: save to temp, call run_body_composition.py for extraction.
-pub fn import(input: BodyCompositionInput) -> Result<RawData, PipelineError> {
+/// Import a anthropometry PDF: save to temp, call run_anthropometry.py for extraction.
+pub fn import(input: AnthropometryInput) -> Result<RawData, PipelineError> {
     let data = util::data_dir().map_err(PipelineError::Import)?;
 
     // Save PDF to temp location
@@ -28,7 +28,7 @@ pub fn import(input: BodyCompositionInput) -> Result<RawData, PipelineError> {
 
     // Call Python extraction script
     let script =
-        util::find_script("run_body_composition.py").map_err(PipelineError::Import)?;
+        util::find_script("run_anthropometry.py").map_err(PipelineError::Import)?;
     let python = util::find_venv_python(&script).map_err(PipelineError::Import)?;
 
     let mut cmd = Command::new(&python);
@@ -49,7 +49,7 @@ pub fn import(input: BodyCompositionInput) -> Result<RawData, PipelineError> {
     }
 
     let output = cmd.output().map_err(|e| {
-        PipelineError::ExternalProcess(format!("Failed to run body composition script: {e}"))
+        PipelineError::ExternalProcess(format!("Failed to run anthropometry script: {e}"))
     })?;
 
     // Clean up temp file
@@ -58,7 +58,7 @@ pub fn import(input: BodyCompositionInput) -> Result<RawData, PipelineError> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(PipelineError::ExternalProcess(format!(
-            "Body composition extraction failed: {stderr}"
+            "Anthropometry extraction failed: {stderr}"
         )));
     }
 

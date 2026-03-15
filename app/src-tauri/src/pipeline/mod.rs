@@ -13,14 +13,14 @@ use types::{OutputContract, RawData};
 /// not how each layer computes its output.
 pub trait Node {
     /// Node-specific input to the Import layer.
-    /// Bloodwork: file bytes + name. Imaging: file bytes + modality. Etc.
+    /// Hepatology: file bytes + name. Radiology: file bytes + model. Etc.
     type ImportInput;
 
     /// Node-specific unified data structure.
-    /// Bloodwork: parsed markers. Imaging: normalised scan metadata. Etc.
+    /// Hepatology: parsed markers. Radiology: findings + scan metadata. Etc.
     type UnifiedData;
 
-    /// Unique identifier for this node (e.g. "bloodwork").
+    /// Unique identifier for this node (e.g. "hepatology").
     fn node_id(&self) -> &str;
 
     /// Layer 1: Import — ingest raw data, extract collection date,

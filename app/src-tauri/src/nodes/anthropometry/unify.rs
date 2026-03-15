@@ -5,11 +5,11 @@ use crate::pipeline::types::{
     DeviationMetric, FlagClassification, RawData, ValidationResult, ValidationStatus,
 };
 
-/// Unified body composition data: parsed markers with standardised units and flags.
+/// Unified anthropometry data: parsed markers with standardised units and flags.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BodyCompositionData {
+pub struct AnthropometryData {
     /// All parsed markers from the BIA report.
-    pub markers: Vec<BodyCompositionMarker>,
+    pub markers: Vec<AnthropometryMarker>,
     /// Validation result for the overall dataset.
     pub validation: ValidationResult,
     /// BIA device if identified.
@@ -20,9 +20,9 @@ pub struct BodyCompositionData {
     pub python_evaluation: Option<serde_json::Value>,
 }
 
-/// A single parsed body composition marker.
+/// A single parsed anthropometry marker.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BodyCompositionMarker {
+pub struct AnthropometryMarker {
     /// Canonical marker name (e.g. "Body Mass Index").
     pub name: String,
     /// Original name as it appeared on the PDF.
@@ -51,8 +51,8 @@ pub struct BodyCompositionMarker {
     pub deviation: DeviationMetric,
 }
 
-/// Unify raw body composition data by reading the enriched Stage 2 output from Python.
-pub fn unify(raw: &RawData) -> Result<BodyCompositionData, PipelineError> {
+/// Unify raw anthropometry data by reading the enriched Stage 2 output from Python.
+pub fn unify(raw: &RawData) -> Result<AnthropometryData, PipelineError> {
     let device = raw
         .content
         .get("record")
@@ -76,7 +76,7 @@ pub fn unify(raw: &RawData) -> Result<BodyCompositionData, PipelineError> {
         field_issues: vec![],
     };
 
-    Ok(BodyCompositionData {
+    Ok(AnthropometryData {
         markers,
         validation,
         device,
@@ -85,7 +85,7 @@ pub fn unify(raw: &RawData) -> Result<BodyCompositionData, PipelineError> {
     })
 }
 
-fn parse_markers_from_content(content: &serde_json::Value) -> Vec<BodyCompositionMarker> {
+fn parse_markers_from_content(content: &serde_json::Value) -> Vec<AnthropometryMarker> {
     let marker_array = match content.get("markers").and_then(|m| m.as_array()) {
         Some(arr) => arr,
         None => return Vec::new(),
@@ -171,7 +171,7 @@ fn parse_markers_from_content(content: &serde_json::Value) -> Vec<BodyCompositio
         let deviation_pct = item.get("deviation_pct").and_then(|v| v.as_f64());
         let deviation_fraction = deviation_pct.map(|pct| pct / 100.0);
 
-        markers.push(BodyCompositionMarker {
+        markers.push(AnthropometryMarker {
             name,
             original_name,
             category,

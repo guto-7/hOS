@@ -7,35 +7,35 @@ use crate::pipeline::error::PipelineError;
 use crate::pipeline::types::{EvaluationOutput, OutputContract, RawData};
 use crate::pipeline::Node;
 
-use import::BodyCompositionInput;
-use unify::BodyCompositionData;
+use import::AnthropometryInput;
+use unify::AnthropometryData;
 
 pub struct AnthropometryNode;
 
 impl Node for AnthropometryNode {
-    type ImportInput = BodyCompositionInput;
-    type UnifiedData = BodyCompositionData;
+    type ImportInput = AnthropometryInput;
+    type UnifiedData = AnthropometryData;
 
     fn node_id(&self) -> &str {
         "anthropometry"
     }
 
-    fn import(&self, input: BodyCompositionInput) -> Result<RawData, PipelineError> {
+    fn import(&self, input: AnthropometryInput) -> Result<RawData, PipelineError> {
         import::import(input)
     }
 
-    fn unify(&self, raw: &RawData) -> Result<BodyCompositionData, PipelineError> {
+    fn unify(&self, raw: &RawData) -> Result<AnthropometryData, PipelineError> {
         unify::unify(raw)
     }
 
-    fn evaluate(&self, data: &BodyCompositionData) -> Result<EvaluationOutput, PipelineError> {
+    fn evaluate(&self, data: &AnthropometryData) -> Result<EvaluationOutput, PipelineError> {
         evaluate::evaluate(data)
     }
 
     fn output(
         &self,
         raw: &RawData,
-        data: &BodyCompositionData,
+        data: &AnthropometryData,
         evaluation: &EvaluationOutput,
     ) -> Result<OutputContract, PipelineError> {
         pipeline::build_output(raw, data, evaluation)

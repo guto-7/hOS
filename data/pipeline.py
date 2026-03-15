@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-hOS Blood Work Pipeline
+hOS Hepatology Pipeline
 PDF → SQLite (raw) → Match markers.json → Enrich (standardize, flag)
 """
 
@@ -157,9 +157,9 @@ def parse_markers_from_text(text: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 def create_db(db_path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_path))
-    conn.execute("DROP TABLE IF EXISTS bloodwork")
+    conn.execute("DROP TABLE IF EXISTS hepatology")
     conn.execute("""
-        CREATE TABLE bloodwork (
+        CREATE TABLE hepatology (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
             marker_name     TEXT NOT NULL,
             pdf_value       REAL,
@@ -180,7 +180,7 @@ def create_db(db_path: Path) -> sqlite3.Connection:
 def insert_rows(conn: sqlite3.Connection, markers: list[dict]):
     for m in markers:
         conn.execute("""
-            INSERT INTO bloodwork
+            INSERT INTO hepatology
                 (marker_name, pdf_value, pdf_unit, pdf_ref_low, pdf_ref_high)
             VALUES (?, ?, ?, ?, ?)
         """, (
@@ -309,7 +309,7 @@ def convert_unit(value, from_unit: str, marker_def: dict) -> tuple:
 def enrich_rows(conn: sqlite3.Connection, markers_def: list[dict], patient: dict):
     alias_index = build_alias_index(markers_def)
 
-    rows = conn.execute("SELECT id, marker_name, pdf_value, pdf_unit FROM bloodwork").fetchall()
+    rows = conn.execute("SELECT id, marker_name, pdf_value, pdf_unit FROM hepatology").fetchall()
 
     for row_id, marker_name, value, unit in rows:
         marker_def = alias_index.get(marker_name.lower())
@@ -328,7 +328,7 @@ def enrich_rows(conn: sqlite3.Connection, markers_def: list[dict], patient: dict
         flag = compute_flag(std_value, json_low, json_high)
 
         conn.execute("""
-            UPDATE bloodwork SET
+            UPDATE hepatology SET
                 std_value = ?, std_unit = ?,
                 json_ref_low = ?, json_ref_high = ?,
                 flag = ?
@@ -347,14 +347,14 @@ def enrich_rows(conn: sqlite3.Connection, markers_def: list[dict], patient: dict
 # ---------------------------------------------------------------------------
 def build_result_json(conn: sqlite3.Connection, patient: dict) -> list[dict]:
     """Build the enriched JSON result from the database."""
-    columns = [desc[0] for desc in conn.execute("SELECT * FROM bloodwork LIMIT 0").description]
-    all_rows = conn.execute("SELECT * FROM bloodwork ORDER BY id").fetchall()
+    columns = [desc[0] for desc in conn.execute("SELECT * FROM hepatology LIMIT 0").description]
+    all_rows = conn.execute("SELECT * FROM hepatology ORDER BY id").fetchall()
     markers = [dict(zip(columns, row)) for row in all_rows]
     return {"patient": patient, "markers": markers}
 
 
 def main():
-    parser = argparse.ArgumentParser(description="hOS Blood Work Pipeline")
+    parser = argparse.ArgumentParser(description="hOS Hepatology Pipeline")
     parser.add_argument("pdf", help="Path to blood work PDF")
     parser.add_argument("--output-dir", help="Directory for output files (default: same as script)")
     parser.add_argument("--json-stdout", action="store_true", help="Print enriched JSON to stdout (for Tauri)")
@@ -363,10 +363,10 @@ def main():
     # Resolve output paths
     out_dir = Path(args.output_dir) if args.output_dir else DATA_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
-    raw_db_path = out_dir / "bloodwork_raw.db"
-    enriched_db_path = out_dir / "bloodwork_enriched.db"
-    extracted_txt_path = out_dir / "bloodwork_extracted.txt"
-    enriched_json_path = out_dir / "bloodwork_enriched.json"
+    raw_db_path = out_dir / "hepatology_raw.db"
+    enriched_db_path = out_dir / "hepatology_enriched.db"
+    extracted_txt_path = out_dir / "hepatology_extracted.txt"
+    enriched_json_path = out_dir / "hepatology_enriched.json"
 
     quiet = args.json_stdout  # suppress prints when outputting JSON
 
@@ -394,7 +394,7 @@ def main():
     raw_conn = create_db(raw_db_path)
     insert_rows(raw_conn, markers)
     if not quiet:
-        raw_count = raw_conn.execute("SELECT COUNT(*) FROM bloodwork").fetchone()[0]
+        raw_count = raw_conn.execute("SELECT COUNT(*) FROM hepatology").fetchone()[0]
         print(f"       {raw_count} rows inserted")
     raw_conn.close()
 
@@ -417,10 +417,10 @@ def main():
         print(json.dumps(result))
     else:
         # Summary
-        total = enriched_conn.execute("SELECT COUNT(*) FROM bloodwork").fetchone()[0]
-        matched = enriched_conn.execute("SELECT COUNT(*) FROM bloodwork WHERE std_value IS NOT NULL").fetchone()[0]
+        total = enriched_conn.execute("SELECT COUNT(*) FROM hepatology").fetchone()[0]
+        matched = enriched_conn.execute("SELECT COUNT(*) FROM hepatology WHERE std_value IS NOT NULL").fetchone()[0]
         flagged = enriched_conn.execute(
-            "SELECT COUNT(*) FROM bloodwork WHERE flag IN ('HIGH', 'LOW')"
+            "SELECT COUNT(*) FROM hepatology WHERE flag IN ('HIGH', 'LOW')"
         ).fetchone()[0]
 
         print(f"\nDone! {matched}/{total} markers matched. {flagged} flagged.")

@@ -1,0 +1,96 @@
+use std::fs;
+use std::process::Command;
+
+use crate::pipeline::error::PipelineError;
+use crate::pipeline::types::RawData;
+use crate::util;
+
+/// Input to the hepatology Import layer: a PDF file plus optional user profile.
+pub struct HepatologyInput {
+    pub file_name: String,
+    pub file_bytes: Vec<u8>,
+    pub sex: Option<String>,
+    pub age: Option<u32>,
+    pub pregnant: Option<bool>,
+    pub cycle_phase: Option<String>,
+    pub fasting: Option<bool>,
+}
+
+/// Import a hepatology PDF: save to temp, call run_hepatology.py for extraction.
+pub fn import(input: HepatologyInput) -> Result<RawData, PipelineError> {
+    let data = util::data_dir().map_err(PipelineError::Import)?;
+
+    // Save PDF to temp location
+    let tmp_dir = data.join("tmp");
+    fs::create_dir_all(&tmp_dir)
+        .map_err(|e| PipelineError::Import(format!("Failed to create tmp dir: {e}")))?;
+    let pdf_path = tmp_dir.join(&input.file_name);
+    fs::write(&pdf_path, &input.file_bytes)
+        .map_err(|e| PipelineError::Import(format!("Failed to save PDF: {e}")))?;
+
+    // Call Python extraction script
+    let script = util::find_script("run_hepatology.py").map_err(PipelineError::Import)?;
+    let python = util::find_venv_python(&script).map_err(PipelineError::Import)?;
+
+    let mut cmd = Command::new(&python);
+    cmd.arg(&script)
+        .arg(pdf_path.to_str().unwrap_or_default())
+        .arg("--output-dir")
+        .arg(data.to_str().unwrap_or_default())
+        .arg("--json-stdout");
+
+    if let Some(ref sex) = input.sex {
+        cmd.arg("--sex").arg(sex);
+    }
+    if let Some(age) = input.age {
+        cmd.arg("--age").arg(age.to_string());
+    }
+    if input.pregnant == Some(true) {
+        cmd.arg("--pregnant");
+    }
+    if let Some(ref phase) = input.cycle_phase {
+        cmd.arg("--cycle-phase").arg(phase);
+    }
+    if input.fasting == Some(true) {
+        cmd.arg("--fasting");
+    }
+
+    let output = cmd
+        .output()
+        .map_err(|e| PipelineError::ExternalProcess(format!("Failed to run hepatology script: {e}")))?;
+
+    // Clean up temp file
+    let _ = fs::remove_file(&pdf_path);
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(PipelineError::ExternalProcess(format!(
+            "Hepatology extraction failed: {stderr}"
+        )));
+    }
+
+    let json_str = String::from_utf8_lossy(&output.stdout).to_string();
+    let content: serde_json::Value = serde_json::from_str(&json_str)
+        .map_err(|e| PipelineError::Import(format!("Invalid JSON from extraction: {e}")))?;
+
+    // Extract file hash and collection date from the Python output
+    let file_hash = content
+        .get("record")
+        .and_then(|r| r.get("file_hash"))
+        .and_then(|h| h.as_str())
+        .map(String::from);
+
+    let collection_date = content
+        .get("record")
+        .and_then(|r| r.get("test_date"))
+        .and_then(|d| d.as_str())
+        .map(String::from);
+
+    Ok(RawData {
+        source: pdf_path.to_string_lossy().to_string(),
+        original_name: Some(input.file_name),
+        file_hash,
+        collection_date,
+        content,
+    })
+}

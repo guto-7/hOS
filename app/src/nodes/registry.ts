@@ -1,22 +1,36 @@
 import type { ComponentType } from "react";
-import BloodworkContent from "./bloodwork/BloodworkContent";
+import HepatologyContent from "./hepatology/HepatologyContent";
 import RadiologyContent from "./radiology/RadiologyContent";
 import AnthropometryContent from "./anthropometry/AnthropometryContent";
 import OrchestratorContent from "./orchestrator/OrchestratorContent";
+
+export interface HistoryEntry {
+  id: string;
+  label: string;
+  detail: string;
+}
+
+export interface NodeContentProps {
+  onHistoryChange?: (entries: HistoryEntry[]) => void;
+  onActiveLabel?: (label: string | null) => void;
+  historyRef?: React.RefObject<((id: string) => void) | null>;
+  deleteRef?: React.RefObject<((id: string) => Promise<void>) | null>;
+  resetRef?: React.RefObject<(() => void) | null>;
+}
 
 export interface NodeDefinition {
   id: string;
   title: string;
   description: string;
-  DashboardContent: ComponentType;
+  DashboardContent: ComponentType<NodeContentProps>;
 }
 
 export const NODES: NodeDefinition[] = [
   {
-    id: "bloodwork",
-    title: "Blood Work",
-    description: "Upload bloodwork PDFs and track biomarkers over time.",
-    DashboardContent: BloodworkContent,
+    id: "hepatology",
+    title: "Hepatology",
+    description: "Upload hepatology PDFs and track biomarkers over time.",
+    DashboardContent: HepatologyContent,
   },
   {
     id: "radiology",
@@ -26,8 +40,8 @@ export const NODES: NodeDefinition[] = [
   },
   {
     id: "anthropometry",
-    title: "Body Composition",
-    description: "Manual measurements and body composition analysis.",
+    title: "Anthropometry",
+    description: "BIA report parsing and anthropometric analysis.",
     DashboardContent: AnthropometryContent,
   },
   {

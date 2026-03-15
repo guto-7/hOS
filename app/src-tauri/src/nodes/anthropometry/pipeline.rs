@@ -1,12 +1,12 @@
 use crate::pipeline::error::PipelineError;
 use crate::pipeline::types::{ContractMetadata, EvaluationOutput, OutputContract, RawData};
 
-use super::unify::BodyCompositionData;
+use super::unify::AnthropometryData;
 
-/// Assemble the output contract for a body composition pipeline run.
+/// Assemble the output contract for a anthropometry pipeline run.
 pub fn build_output(
     raw: &RawData,
-    data: &BodyCompositionData,
+    data: &AnthropometryData,
     evaluation: &EvaluationOutput,
 ) -> Result<OutputContract, PipelineError> {
     let unified_data = serde_json::to_value(data)
@@ -36,7 +36,7 @@ fn now_iso8601() -> String {
     format!("{secs}")
 }
 
-fn build_processing_notes(data: &BodyCompositionData) -> Vec<String> {
+fn build_processing_notes(data: &AnthropometryData) -> Vec<String> {
     let mut notes = Vec::new();
     notes.push(format!("{} markers parsed", data.markers.len()));
     if let Some(ref device) = data.device {

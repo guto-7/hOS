@@ -5,14 +5,14 @@ use crate::pipeline::types::{
     CertaintyGrade, CertaintyLevel, DomainScore, EvaluationOutput, FlagClassification,
 };
 
-use super::unify::BodyCompositionData;
+use super::unify::AnthropometryData;
 
-/// Evaluate unified body composition data.
+/// Evaluate unified anthropometry data.
 ///
 /// Uses the Python Stage 3 evaluation output embedded in `data.python_evaluation`
 /// when available. Falls back to a stub grading when the Python evaluation is absent
 /// (e.g. stage2-only runs or legacy data).
-pub fn evaluate(data: &BodyCompositionData) -> Result<EvaluationOutput, PipelineError> {
+pub fn evaluate(data: &AnthropometryData) -> Result<EvaluationOutput, PipelineError> {
     if let Some(ref py_eval) = data.python_evaluation {
         return evaluate_from_python(data, py_eval);
     }
@@ -24,7 +24,7 @@ pub fn evaluate(data: &BodyCompositionData) -> Result<EvaluationOutput, Pipeline
 // ---------------------------------------------------------------------------
 
 fn evaluate_from_python(
-    data: &BodyCompositionData,
+    data: &AnthropometryData,
     py_eval: &serde_json::Value,
 ) -> Result<EvaluationOutput, PipelineError> {
     // Collect critical flags from markers
@@ -203,7 +203,7 @@ fn evaluate_from_python(
 
     let mut engine_versions = HashMap::new();
     engine_versions.insert(
-        "body_composition_evaluator".to_string(),
+        "anthropometry_evaluator".to_string(),
         "1.0.0".to_string(),
     );
 
@@ -225,6 +225,7 @@ fn parse_domain_scores(py_eval: &serde_json::Value) -> Vec<DomainScore> {
 
     arr.iter()
         .filter_map(|d| {
+            let domain = d.get("domain").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
             let label = d.get("label")?.as_str()?.to_string();
             let score = d.get("score")?.as_f64()?;
             let grade = d
@@ -258,6 +259,7 @@ fn parse_domain_scores(py_eval: &serde_json::Value) -> Vec<DomainScore> {
             };
 
             Some(DomainScore {
+                domain,
                 system: label,
                 score,
                 interpretation,
@@ -272,7 +274,7 @@ fn parse_domain_scores(py_eval: &serde_json::Value) -> Vec<DomainScore> {
 // Stub fallback
 // ---------------------------------------------------------------------------
 
-fn evaluate_stub(data: &BodyCompositionData) -> Result<EvaluationOutput, PipelineError> {
+fn evaluate_stub(data: &AnthropometryData) -> Result<EvaluationOutput, PipelineError> {
     let critical_flags: Vec<String> = data
         .markers
         .iter()
@@ -285,7 +287,7 @@ fn evaluate_stub(data: &BodyCompositionData) -> Result<EvaluationOutput, Pipelin
         let category = marker
             .category
             .clone()
-            .unwrap_or_else(|| "Body Composition".to_string());
+            .unwrap_or_else(|| "Anthropometry".to_string());
         categories
             .entry(category)
             .or_default()
@@ -325,7 +327,7 @@ fn evaluate_stub(data: &BodyCompositionData) -> Result<EvaluationOutput, Pipelin
 
     let mut engine_versions = HashMap::new();
     engine_versions.insert(
-        "body_composition_evaluator".to_string(),
+        "anthropometry_evaluator".to_string(),
         "1.0.0-stub".to_string(),
     );
 

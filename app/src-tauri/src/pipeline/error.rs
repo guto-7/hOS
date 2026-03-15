@@ -3,6 +3,7 @@ use std::fmt;
 
 /// All errors that can occur within the node pipeline.
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 pub enum PipelineError {
     /// File not found, unreadable, or invalid format.
     Import(String),

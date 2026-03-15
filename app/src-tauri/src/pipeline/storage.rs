@@ -15,12 +15,15 @@ pub trait NodeStorage {
 
     /// List all stored contract hashes for this node.
     fn list_contracts(&self) -> Result<Vec<String>, PipelineError>;
+
+    /// Delete a stored contract by source hash.
+    fn delete_contract(&self, source_hash: &str) -> Result<(), PipelineError>;
 }
 
 /// File-system-backed storage. Each node gets a subdirectory
 /// under the base data directory.
 pub struct FsNodeStorage {
-    /// e.g. ~/Documents/hOS/results/bloodwork/
+    /// e.g. ~/Documents/hOS/results/hepatology/
     node_dir: PathBuf,
 }
 
@@ -74,5 +77,16 @@ impl NodeStorage for FsNodeStorage {
             }
         }
         Ok(hashes)
+    }
+
+    fn delete_contract(&self, source_hash: &str) -> Result<(), PipelineError> {
+        let path = self.node_dir.join(format!("{source_hash}.json"));
+        if !path.exists() {
+            return Err(PipelineError::Storage(format!(
+                "No contract found for hash {source_hash}"
+            )));
+        }
+        fs::remove_file(&path)?;
+        Ok(())
     }
 }

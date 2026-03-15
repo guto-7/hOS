@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import ReactMarkdown from "react-markdown";
+import type { NodeContentProps } from "../registry";
 import styles from "./RadiologyContent.module.css";
 import BodyDiagram from "./BodyDiagram";
 import FractureCrop from "./FractureCrop";
@@ -49,14 +50,8 @@ interface ExtractionResult {
   };
 }
 
-interface AnalysisResult {
-  success: boolean;
-  record: {
-    file_hash: string;
-    stored_path: string;
-    original_name: string;
-    is_duplicate: boolean;
-  };
+interface RadiologyData {
+  findings: Finding[];
   image_metadata: {
     width: number;
     height: number;
@@ -65,34 +60,62 @@ interface AnalysisResult {
     format: string;
     file_size_kb: number;
     is_grayscale: boolean;
+    has_exif?: boolean;
+    orientation?: number;
+    warnings: string[];
   };
-  model: string;
-  findings: Finding[];
   summary: {
     high_probability: string[];
     moderate_probability: string[];
     total_pathologies_screened: number;
     flagged_count: number;
   };
+  model: string;
+  model_key: string;
   heatmap?: string;
   heatmap_pathology?: string;
-  interpretation?: string;
   body_part_detection?: {
     body_part: string;
     confidence: number;
     description: string;
     recommended_model: string | null;
   };
+  stored_path?: string;
+  interpretation?: string;
+  quality: { warnings: string[]; warning_count: number };
+}
+
+interface EvaluationOutput {
+  critical_flags: string[];
+  categories: Record<string, string[]>;
+  domain_scores: { domain: string; system: string; score: number; interpretation: string; components: string[]; version: string }[];
+  condition_matches: { condition: string; criteria: { criterion: string; met: boolean; observed: string | null; expected: string }[]; certainty: { grade: string; confidence: number } }[];
+  certainty: { grade: string; confidence: number; missing_data: string[]; incompleteness_impact: string };
+  engine_versions: Record<string, string>;
+}
+
+interface OutputContract {
+  node_id: string;
+  schema_version: string;
+  produced_at: string;
+  collection_date: string | null;
+  unified_data: RadiologyData;
+  evaluation: EvaluationOutput;
+  metadata: {
+    source_hash: string | null;
+    original_name: string | null;
+    engine_versions: Record<string, string>;
+    processing_notes: string[];
+  };
 }
 
 interface HistoryRecord {
-  file_hash: string;
-  original_name: string;
-  width: number | null;
-  height: number | null;
-  format: string | null;
-  flagged_count: number | null;
-  total_screened: number | null;
+  source_hash: string;
+  original_name: string | null;
+  collection_date: string | null;
+  node_id: string;
+  critical_flags_count: number;
+  certainty_grade: string;
 }
 
 type Status = "loading" | "idle" | "extracting" | "confirming" | "processing" | "done" | "error";
@@ -220,18 +243,17 @@ const BODY_PART_INFO: Record<string, { anatomy: string; common: string }> = {
 
 /* ── Component ─────────────────────────────────────────────────── */
 
-function RadiologyContent() {
+function RadiologyContent({ onHistoryChange, onActiveLabel, historyRef, deleteRef, resetRef }: NodeContentProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [status, setStatus] = useState<Status>("loading");
   const [errorMsg, setErrorMsg] = useState("");
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [result, setResult] = useState<OutputContract | null>(null);
   const [extraction, setExtraction] = useState<ExtractionResult | null>(null);
   const [currentFile, setCurrentFile] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [fileBytes, setFileBytes] = useState<number[] | null>(null);
   const [history, setHistory] = useState<HistoryRecord[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
   const [activeHash, setActiveHash] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<ModelKey>("auto");
   const [showHeatmap, setShowHeatmap] = useState(true);
@@ -243,7 +265,7 @@ function RadiologyContent() {
 
   const loadHistory = useCallback(async () => {
     try {
-      const json = await invoke<string>("list_imaging_results");
+      const json = await invoke<string>("list_radiology");
       const records: HistoryRecord[] = JSON.parse(json);
       setHistory(records);
       return records;
@@ -257,7 +279,7 @@ function RadiologyContent() {
     setInterpretationError(null);
     setInterpretationLoading(true);
     try {
-      const json = await invoke<string>("interpret_image", { fileHash: hash });
+      const json = await invoke<string>("interpret_image", { sourceHash: hash });
       const parsed = JSON.parse(json);
       if (parsed.success) {
         setInterpretation(parsed.interpretation);
@@ -273,17 +295,17 @@ function RadiologyContent() {
 
   const loadResult = useCallback(async (hash: string) => {
     try {
-      const json = await invoke<string>("load_imaging_result", { fileHash: hash });
-      const parsed: AnalysisResult = JSON.parse(json);
+      const json = await invoke<string>("load_radiology", { sourceHash: hash });
+      const parsed: OutputContract = JSON.parse(json);
       setResult(parsed);
-      setCurrentFile(parsed.record.original_name);
+      setCurrentFile(parsed.metadata.original_name ?? "Unknown");
       setActiveHash(hash);
       setPreviewUrl(null);
       setShowHeatmap(true);
       setStatus("done");
       // Load saved interpretation or fetch new one
-      if (parsed.interpretation) {
-        setInterpretation(parsed.interpretation);
+      if (parsed.unified_data.interpretation) {
+        setInterpretation(parsed.unified_data.interpretation);
         setInterpretationError(null);
         setInterpretationLoading(false);
       } else {
@@ -295,11 +317,63 @@ function RadiologyContent() {
     }
   }, [fetchInterpretation]);
 
+  // Report history to parent whenever it changes
+  useEffect(() => {
+    onHistoryChange?.(
+      history.map((h) => ({
+        id: h.source_hash,
+        label: h.original_name ?? "Unknown",
+        detail: h.critical_flags_count > 0 ? `${h.critical_flags_count} critical` : "No critical flags",
+      }))
+    );
+  }, [history, onHistoryChange]);
+
+  // Report active result label to parent
+  useEffect(() => {
+    onActiveLabel?.(currentFile || null);
+  }, [currentFile, onActiveLabel]);
+
+  // Expose loadResult to parent via ref
+  useEffect(() => {
+    if (historyRef) {
+      historyRef.current = (id: string) => {
+        loadResult(id);
+      };
+    }
+  }, [historyRef, loadResult]);
+
+  // Expose delete to parent via ref
+  useEffect(() => {
+    if (deleteRef) {
+      deleteRef.current = async (id: string) => {
+        await invoke("delete_radiology", { sourceHash: id });
+        const records = await loadHistory();
+        if (activeHash === id) {
+          if (records.length > 0) {
+            await loadResult(records[0].source_hash);
+          } else {
+            setResult(null);
+            setCurrentFile("");
+            setActiveHash(null);
+            setStatus("idle");
+          }
+        }
+      };
+    }
+  }, [deleteRef, loadHistory, loadResult, activeHash]);
+
+  // Expose reset to parent via ref
+  useEffect(() => {
+    if (resetRef) {
+      resetRef.current = reset;
+    }
+  });
+
   useEffect(() => {
     (async () => {
       const records = await loadHistory();
       if (records.length > 0) {
-        await loadResult(records[0].file_hash);
+        await loadResult(records[0].source_hash);
       } else {
         setStatus("idle");
       }
@@ -355,20 +429,22 @@ function RadiologyContent() {
     setStatus("processing");
 
     try {
-      const jsonString = await invoke<string>("process_image", {
+      const jsonString = await invoke<string>("run_radiology", {
         fileName: currentFile,
         fileBytes: fileBytes,
         model: selectedModel,
       });
 
-      const parsed: AnalysisResult = JSON.parse(jsonString);
+      const parsed: OutputContract = JSON.parse(jsonString);
       setResult(parsed);
-      setActiveHash(parsed.record.file_hash);
+      setActiveHash(parsed.metadata.source_hash ?? "");
       setStatus("done");
       setFileBytes(null);
       await loadHistory();
       // Fire off interpretation async (non-blocking)
-      fetchInterpretation(parsed.record.file_hash);
+      if (parsed.metadata.source_hash) {
+        fetchInterpretation(parsed.metadata.source_hash);
+      }
     } catch (err) {
       setErrorMsg(String(err));
       setStatus("error");
@@ -419,7 +495,6 @@ function RadiologyContent() {
     setFileBytes(null);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
-    setShowHistory(false);
     setInterpretation(null);
     setInterpretationLoading(false);
     setInterpretationError(null);
@@ -450,38 +525,6 @@ function RadiologyContent() {
       {/* ── Idle: upload image ────────────────────────────── */}
       {status === "idle" && (
         <>
-          {history.length > 0 && (
-            <div className={styles.historyBar}>
-              <span className={styles.historyBarText}>
-                {history.length} past scan{history.length !== 1 ? "s" : ""} available
-              </span>
-              <button
-                className={styles.historyToggle}
-                onClick={() => setShowHistory(!showHistory)}
-              >
-                {showHistory ? "Hide" : "Show"} history
-              </button>
-            </div>
-          )}
-
-          {showHistory && (
-            <div className={styles.historyList}>
-              {history.map((h) => (
-                <button
-                  key={h.file_hash}
-                  className={styles.historyItem}
-                  onClick={() => loadResult(h.file_hash)}
-                >
-                  <span className={styles.historyName}>{h.original_name}</span>
-                  <span className={styles.historyMeta}>
-                    {h.format} {h.width}&times;{h.height}
-                    {h.flagged_count != null && ` · ${h.flagged_count} flagged`}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-
           <div
             className={`${styles.dropzone} ${isDragOver ? styles.dropzoneActive : ""}`}
             onDrop={handleDrop}
@@ -660,82 +703,43 @@ function RadiologyContent() {
 
       {/* ── Results ──────────────────────────────────────────── */}
       {status === "done" && result && (() => {
-        const modelMeta = MODEL_META[result.model] ?? null;
+        const d = result.unified_data;
+        const modelMeta = MODEL_META[d.model] ?? null;
         // Infer body part: result detection > extraction detection > model-implied
         const MODEL_BODY_PART: Record<string, string> = {
           "fracture-wrist": "Wrist",
           "chest-xray": "Chest",
         };
-        const inferredSite = result.body_part_detection?.body_part
+        const inferredSite = d.body_part_detection?.body_part
           ?? extraction?.body_part_detection?.body_part
-          ?? MODEL_BODY_PART[result.model]
+          ?? MODEL_BODY_PART[d.model]
           ?? null;
-        const flagged = result.findings.filter((f) => f.level === "HIGH" || f.level === "MODERATE");
-        const topFinding = result.findings.length > 0
-          ? result.findings.reduce((a, b) => (a.probability > b.probability ? a : b))
+        const flagged = d.findings.filter((f) => f.level === "HIGH" || f.level === "MODERATE");
+        const topFinding = d.findings.length > 0
+          ? d.findings.reduce((a, b) => (a.probability > b.probability ? a : b))
           : null;
-        const avgConfidence = result.findings.length > 0
-          ? result.findings.reduce((sum, f) => sum + f.probability, 0) / result.findings.length
+        const avgConfidence = d.findings.length > 0
+          ? d.findings.reduce((sum, f) => sum + f.probability, 0) / d.findings.length
           : 0;
-        const hasSizes = result.findings.some((f) => f.size);
+        const hasSizes = d.findings.some((f) => f.size);
 
         return (
           <>
-            {/* Summary bar */}
-            <div className={styles.summaryBar}>
-              <span className={styles.summaryFile}>{currentFile}</span>
-              <span className={styles.summaryStats}>
-                {result.summary.total_pathologies_screened} pathologies screened
-                &middot; {result.summary.flagged_count} flagged
-              </span>
-              <div className={styles.summaryActions}>
-                {history.length > 0 && (
-                  <button
-                    className={styles.historyToggle}
-                    onClick={() => setShowHistory(!showHistory)}
-                  >
-                    {showHistory ? "Hide" : "Show"} history
-                  </button>
-                )}
-                <button className={styles.uploadAnother} onClick={reset}>
-                  Upload another
-                </button>
-              </div>
-            </div>
-
-            {showHistory && (
-              <div className={styles.historyList}>
-                {history.map((h) => (
-                  <button
-                    key={h.file_hash}
-                    className={`${styles.historyItem} ${h.file_hash === activeHash ? styles.historyItemActive : ""}`}
-                    onClick={() => loadResult(h.file_hash)}
-                  >
-                    <span className={styles.historyName}>{h.original_name}</span>
-                    <span className={styles.historyMeta}>
-                      {h.format} {h.width}&times;{h.height}
-                      {h.flagged_count != null && ` · ${h.flagged_count} flagged`}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-
             {/* ── Grid layout (matches wireframe) ────────────── */}
             <div className={styles.resultsGrid}>
 
               {/* ── Row 1, Col 1: Identified Scan ──────────────── */}
               <div className={`${styles.gridPanel} ${styles.scanPanel}`}>
                 <p className={styles.gridPanelLabel}>Identified Scan</p>
-                {(previewUrl || result.heatmap) && (
+                {(previewUrl || d.heatmap) && (
                   <>
-                    {result.heatmap && (
+                    {d.heatmap && (
                       <div className={styles.scanToggle}>
                         <button
                           className={`${styles.toggleButton} ${showHeatmap ? styles.toggleActive : ""}`}
                           onClick={() => setShowHeatmap(true)}
                         >
-                          {result.findings.some((f) => f.bbox) ? "Annotated" : "Heatmap"}
+                          {d.findings.some((f) => f.bbox) ? "Annotated" : "Heatmap"}
                         </button>
                         {previewUrl && (
                           <button
@@ -748,9 +752,9 @@ function RadiologyContent() {
                       </div>
                     )}
                     <div className={styles.scanImageContainer}>
-                      {showHeatmap && result.heatmap ? (
+                      {showHeatmap && d.heatmap ? (
                         <img
-                          src={`data:image/png;base64,${result.heatmap}`}
+                          src={`data:image/png;base64,${d.heatmap}`}
                           alt="Detection overlay"
                           className={styles.scanImage}
                         />
@@ -758,11 +762,11 @@ function RadiologyContent() {
                         <img src={previewUrl} alt="Original scan" className={styles.scanImage} />
                       ) : null}
                     </div>
-                    {showHeatmap && result.heatmap_pathology && (
+                    {showHeatmap && d.heatmap_pathology && (
                       <p className={styles.heatmapCaption}>
-                        {result.findings.some((f) => f.bbox)
-                          ? <strong>{result.heatmap_pathology}</strong>
-                          : <>Activation map: <strong>{result.heatmap_pathology}</strong></>
+                        {d.findings.some((f) => f.bbox)
+                          ? <strong>{d.heatmap_pathology}</strong>
+                          : <>Activation map: <strong>{d.heatmap_pathology}</strong></>
                         }
                       </p>
                     )}
@@ -809,7 +813,7 @@ function RadiologyContent() {
                         </div>
                         <p className={styles.findingContext}>
                           {f.level === "HIGH"
-                            ? `${f.pathology} detected in the ${location}. Recommend urgent clinical review and follow-up imaging.`
+                            ? `${f.pathology} detected in the ${location}. Recommend urgent clinical review and follow-up.`
                             : `Indicators of ${f.pathology.toLowerCase()} in the ${location} region. Consider clinical correlation and monitoring.`}
                         </p>
                       </div>
@@ -898,9 +902,9 @@ function RadiologyContent() {
                 <div className={styles.scanImageContainer}>
                   {previewUrl ? (
                     <img src={previewUrl} alt="Original scan" className={styles.scanImage} />
-                  ) : result.heatmap ? (
+                  ) : d.heatmap ? (
                     <img
-                      src={`data:image/png;base64,${result.heatmap}`}
+                      src={`data:image/png;base64,${d.heatmap}`}
                       alt="Scan"
                       className={styles.scanImage}
                     />
@@ -960,7 +964,7 @@ function RadiologyContent() {
                         Top finding: {topFinding.pathology}
                       </div>
                       <div className={styles.accuracyLabel}>
-                        Avg across {result.findings.length} findings: {(avgConfidence * 100).toFixed(1)}%
+                        Avg across {d.findings.length} findings: {(avgConfidence * 100).toFixed(1)}%
                       </div>
                     </div>
                   );
@@ -973,7 +977,7 @@ function RadiologyContent() {
               <div className={`${styles.gridPanel} ${styles.modelInfoPanel}`}>
                 <p className={styles.gridPanelLabel}>Info about Model</p>
                 <div className={styles.modelInfoHeader}>
-                  <span className={styles.modelInfoName}>{modelMeta?.name ?? result.model}</span>
+                  <span className={styles.modelInfoName}>{modelMeta?.name ?? d.model}</span>
                   {modelMeta && (
                     <span className={styles.modelInfoArch}>{modelMeta.architecture}</span>
                   )}
@@ -999,9 +1003,9 @@ function RadiologyContent() {
                   return (
                     <>
                       <span className={styles.bodyPartName}>{inferredSite}</span>
-                      {result.body_part_detection && (
+                      {d.body_part_detection && (
                         <span className={styles.bodyPartConf}>
-                          {(result.body_part_detection.confidence * 100).toFixed(0)}% confidence
+                          {(d.body_part_detection.confidence * 100).toFixed(0)}% confidence
                         </span>
                       )}
                       {info && (
@@ -1024,10 +1028,10 @@ function RadiologyContent() {
               {/* ── Row 5, Col 1: Fracture Zoom ──────────────── */}
               <div className={`${styles.gridPanel} ${styles.changedScanPanel}`}>
                 <p className={styles.gridPanelLabel}>Fracture Close-up</p>
-                {result.heatmap && result.findings.some((f) => f.bbox) ? (
+                {d.heatmap && d.findings.some((f) => f.bbox) ? (
                   <FractureCrop
-                    imageSrc={`data:image/png;base64,${result.heatmap}`}
-                    bboxes={result.findings
+                    imageSrc={`data:image/png;base64,${d.heatmap}`}
+                    bboxes={d.findings
                       .filter((f): f is Finding & { bbox: NonNullable<Finding["bbox"]> } => !!f.bbox)
                       .map((f, i) => ({
                         bbox: f.bbox,
@@ -1046,11 +1050,11 @@ function RadiologyContent() {
                 <p className={styles.gridPanelLabel}>Fracture Size</p>
                 {hasSizes ? (
                   <div className={styles.sizeGrid}>
-                    {result.findings
+                    {d.findings
                       .filter((f) => f.size)
                       .map((f, i) => {
-                        const imgW = result.image_metadata.width;
-                        const imgH = result.image_metadata.height;
+                        const imgW = d.image_metadata.width;
+                        const imgH = d.image_metadata.height;
                         const cx = f.bbox ? ((f.bbox.x1 + f.bbox.x2) / 2 / imgW) : null;
                         const cy = f.bbox ? ((f.bbox.y1 + f.bbox.y2) / 2 / imgH) : null;
                         const posLabel = cx !== null && cy !== null
