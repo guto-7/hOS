@@ -87,7 +87,7 @@ function startNetworkAnimation() {
   }
 
   function vesselCenterX(t) {
-    return width * 0.1 + t * width * 0.8;
+    return t * width;
   }
 
   function vesselCenterY(t) {
@@ -107,7 +107,7 @@ function startNetworkAnimation() {
     const x = vesselCenterX(t);
     const y = vesselCenterY(t);
 
-    const dx = width * 0.8;
+    const dx = width;
     const dy =
       Math.cos(t * Math.PI * 1.1 - 0.5) * (Math.PI * 1.1) * height * 0.09 +
       Math.cos(t * Math.PI * 2.0 + 0.8) * (Math.PI * 2.0) * height * 0.025;

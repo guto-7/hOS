@@ -6,7 +6,7 @@
   <title>hOS</title>
   <meta
     name="description"
-    content="hOS — Understand your blood work. On your device. Private."
+    content="hOS — Understand your diagnostics. On your device. Private."
   />
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -15,10 +15,10 @@
 
   <header class="hero" id="top">
     <div class="hero__content">
-      <p class="eyebrow">Local-first bloodwork interpretation</p>
+      <p class="eyebrow">Local-first diagnostic interpretation</p>
       <h1 class="hero__title">hOS</h1>
       <p class="hero__tagline">
-        Understand your blood work.<br />
+        Understand your diagnostics.<br />
         On your device. Private.
       </p>
 
@@ -39,27 +39,29 @@
     <section class="about section" id="about">
       <div class="section__heading">
         <p class="section__label">About</p>
-        <h2>Built for private, on-device interpretation.</h2>
+        <h2>Built for private, on-device diagnostics.</h2>
       </div>
 
       <div class="card-grid">
         <article class="info-card">
           <div class="icon icon--node" aria-hidden="true"></div>
-          <h3>On-Device AI</h3>
+          <h3>Evidence-Based</h3>
           <p>
-            A fine-tuned 7B language model runs entirely on your machine via
-            llama.cpp. No internet required for interpretation. Your blood panel
-            is analysed locally with structured clinical reasoning.
+            Every diagnostic algorithm is peer-reviewed and published. From
+            HOMA-IR and FIB-4 to PhenoAge and Allostatic Load — deterministic
+            evaluations across metabolic, hormonal, and longevity domains.
+            Reproducible and auditable.
           </p>
         </article>
 
         <article class="info-card">
           <div class="icon icon--network" aria-hidden="true"></div>
-          <h3>Interprets Your Panel</h3>
+          <h3>Multi-Domain Analysis</h3>
           <p>
-            Upload a PDF from any pathology lab. hOS extracts your markers,
-            identifies patterns across clinical conditions, and generates a
-            structured analysis. Ask follow-up questions in chat.
+            Upload blood panels, medical images, or body composition reports.
+            Each diagnostic domain runs as an independent node with its own
+            processing pipeline. A central orchestrator synthesises
+            cross-diagnostic insights.
           </p>
         </article>
 
@@ -68,9 +70,65 @@
           <h3>Private by Design</h3>
           <p>
             Your health data never leaves your device. No cloud storage, no user
-            accounts, no telemetry. The only optional network request is an
-            anonymised literature search — and you control the toggle.
+            accounts, no telemetry. All analysis runs locally — your diagnostics
+            stay yours.
           </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="domains section" id="domains">
+      <div class="section__heading">
+        <p class="section__label">Diagnostic Nodes</p>
+        <h2>Three domains. One systemic view.</h2>
+      </div>
+
+      <div class="card-grid">
+        <article class="domain-card">
+          <div class="domain-card__label">Hepatology</div>
+          <h3>Blood Work</h3>
+          <p>
+            Upload PDFs from any pathology lab. hOS extracts markers, calculates
+            clinical scores, and detects conditions across metabolic, hormonal,
+            liver, and longevity domains.
+          </p>
+          <ul class="domain-card__tags">
+            <li>HOMA-IR</li>
+            <li>FIB-4</li>
+            <li>PhenoAge</li>
+            <li>Thyroid</li>
+            <li>Hormonal</li>
+          </ul>
+        </article>
+
+        <article class="domain-card">
+          <div class="domain-card__label">Radiology</div>
+          <h3>Medical Imaging</h3>
+          <p>
+            Import X-rays, ultrasound, and CT screenshots. Identifies findings,
+            localises pathology with body-region mapping, and provides structured
+            interpretation.
+          </p>
+          <ul class="domain-card__tags">
+            <li>X-Ray</li>
+            <li>Fracture Detection</li>
+            <li>Body Localisation</li>
+          </ul>
+        </article>
+
+        <article class="domain-card">
+          <div class="domain-card__label">Anthropometry</div>
+          <h3>Body Composition</h3>
+          <p>
+            Parse BIA reports from devices like InBody and Tanita. Calculates
+            body score, body age, and tracks composition trends across muscle
+            mass, visceral fat, and cellular health.
+          </p>
+          <ul class="domain-card__tags">
+            <li>Body Score</li>
+            <li>Body Age</li>
+            <li>BIA Analysis</li>
+          </ul>
         </article>
       </div>
     </section>
@@ -148,26 +206,27 @@
         </details>
 
         <details class="faq-item">
-          <summary>Does my bloodwork get uploaded to the cloud?</summary>
+          <summary>Does my health data get uploaded to the cloud?</summary>
           <p>
-            No. hOS is designed to keep your health data on your device. Optional
-            network features should always be user-controlled.
+            No. hOS is designed to keep your health data on your device. All
+            analysis runs locally. Optional network features are always
+            user-controlled.
           </p>
         </details>
 
         <details class="faq-item">
           <summary>What files can I upload?</summary>
           <p>
-            Bloodwork PDF reports from pathology labs. The app extracts markers and
-            structures them for interpretation.
+            Blood work PDFs from pathology labs, medical images (X-rays,
+            ultrasound, CT screenshots), and BIA body composition reports. Each
+            file type is processed by its corresponding diagnostic node.
           </p>
         </details>
 
         <details class="faq-item">
           <summary>Which platforms are supported?</summary>
           <p>
-            hOS is intended for macOS, Windows, and Linux, depending on the builds you
-            publish.
+            hOS is built for macOS, Windows, and Linux.
           </p>
         </details>
 
