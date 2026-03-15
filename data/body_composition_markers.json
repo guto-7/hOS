@@ -3,55 +3,57 @@
     "id": "Weight",
     "name": "Weight",
     "category": "Body Composition",
+    "evaluation": "derived_input",
+    "derives": ["BMI", "PBF_from_BFM"],
     "aliases": ["Weight", "Body Weight", "Wt", "BW"],
     "unit": "kg",
     "unit_conversions": [
       { "from": "lbs", "multiply": 0.4536 },
       { "from": "lb", "multiply": 0.4536 }
-    ],
-    "ranges": {
-      "male": { "low": 55.0, "high": 90.0 },
-      "female": { "low": 45.0, "high": 75.0 }
-    }
+    ]
   },
   {
     "id": "SMM",
     "name": "Skeletal Muscle Mass",
     "category": "Body Composition",
+    "evaluation": "derived_input",
+    "derives": ["SMI"],
+    "derives_formula": "SMM / height_m²",
     "aliases": ["Skeletal Muscle Mass", "SMM", "Skeletal Muscle", "Muscle Mass"],
     "unit": "kg",
     "unit_conversions": [
       { "from": "lbs", "multiply": 0.4536 }
-    ],
-    "ranges": {
-      "male": { "low": 29.0, "high": 40.0 },
-      "female": { "low": 20.0, "high": 28.0 }
-    }
+    ]
   },
   {
     "id": "BFM",
     "name": "Body Fat Mass",
     "category": "Body Composition",
+    "evaluation": "derived_input",
+    "derives": ["PBF_from_BFM", "FMI"],
+    "derives_formula": {
+      "PBF_from_BFM": "BFM / Weight * 100",
+      "FMI": "BFM / height_m²"
+    },
     "aliases": ["Body Fat Mass", "BFM", "Fat Mass", "Body Fat"],
     "unit": "kg",
     "unit_conversions": [
       { "from": "lbs", "multiply": 0.4536 }
-    ],
-    "ranges": {
-      "male": { "low": 5.0, "high": 20.0 },
-      "female": { "low": 8.0, "high": 25.0 }
-    }
+    ]
   },
   {
     "id": "BMI",
     "name": "Body Mass Index",
     "category": "Obesity Analysis",
+    "evaluation": "direct",
     "aliases": ["BMI", "Body Mass Index"],
-    "unit": "kg/m\u00b2",
+    "unit": "kg/m²",
     "unit_conversions": [],
     "ranges": {
-      "low": 18.5,
-      "high": 24.9
+      "underweight": { "high": 18.5 },
+      "normal": { "low": 18.5, "high": 24.9 },
+      "overweight": { "low": 25.0, "high": 29.9 },
+      "obese": { "low": 30.0 }
     },
     "alert_thresholds": {
       "critical_low": 16.0,
@@ -62,89 +64,182 @@
     "id": "PBF",
     "name": "Body Fat Percentage",
     "category": "Obesity Analysis",
+    "evaluation": "direct",
     "aliases": ["PBF", "Percent Body Fat", "Body Fat Percentage", "Body Fat %", "BF%", "Fat %"],
     "unit": "%",
     "unit_conversions": [],
     "ranges": {
-      "male": { "low": 10.0, "high": 20.0 },
-      "female": { "low": 18.0, "high": 28.0 }
+      "male": {
+        "18-39": {
+          "underfat": { "high": 8.0 },
+          "healthy": { "low": 8.0, "high": 19.9 },
+          "overfat": { "low": 20.0, "high": 24.9 },
+          "obese": { "low": 25.0 }
+        },
+        "40-59": {
+          "underfat": { "high": 11.0 },
+          "healthy": { "low": 11.0, "high": 21.9 },
+          "overfat": { "low": 22.0, "high": 27.9 },
+          "obese": { "low": 28.0 }
+        },
+        "60+": {
+          "underfat": { "high": 13.0 },
+          "healthy": { "low": 13.0, "high": 24.9 },
+          "overfat": { "low": 25.0, "high": 29.9 },
+          "obese": { "low": 30.0 }
+        }
+      },
+      "female": {
+        "18-39": {
+          "underfat": { "high": 21.0 },
+          "healthy": { "low": 21.0, "high": 32.9 },
+          "overfat": { "low": 33.0, "high": 38.9 },
+          "obese": { "low": 39.0 }
+        },
+        "40-59": {
+          "underfat": { "high": 23.0 },
+          "healthy": { "low": 23.0, "high": 33.9 },
+          "overfat": { "low": 34.0, "high": 39.9 },
+          "obese": { "low": 40.0 }
+        },
+        "60+": {
+          "underfat": { "high": 24.0 },
+          "healthy": { "low": 24.0, "high": 35.9 },
+          "overfat": { "low": 36.0, "high": 41.9 },
+          "obese": { "low": 42.0 }
+        }
+      }
     },
     "alert_thresholds": {
       "critical_low": 3.0,
-      "critical_high": 40.0
+      "critical_high": 45.0
+    }
+  },
+  {
+    "id": "VFA",
+    "name": "Visceral Fat Area",
+    "category": "Obesity Analysis",
+    "evaluation": "direct",
+    "available_from": ["InBody", "Seca"],
+    "aliases": ["Visceral Fat Area", "VFA", "Visceral Adipose Tissue", "VAT Area"],
+    "unit": "cm²",
+    "unit_conversions": [],
+    "ranges": {
+      "normal": { "high": 100.0 },
+      "elevated": { "low": 100.0, "high": 160.0 },
+      "high_risk": { "low": 160.0 }
+    },
+    "alert_thresholds": {
+      "critical_high": 200.0
     }
   },
   {
     "id": "VFL",
     "name": "Visceral Fat Level",
     "category": "Obesity Analysis",
-    "aliases": ["Visceral Fat Level", "VFL", "Visceral Fat", "Visceral Fat Area"],
+    "evaluation": "direct",
+    "available_from": ["Tanita"],
+    "aliases": ["Visceral Fat Level", "VFL", "Visceral Fat Rating"],
     "unit": "level",
     "unit_conversions": [],
     "ranges": {
-      "low": 1,
-      "high": 9
+      "normal": { "high": 9 },
+      "elevated": { "low": 10, "high": 14 },
+      "high_risk": { "low": 15 }
     },
     "alert_thresholds": {
-      "critical_high": 15
+      "critical_high": 20
     }
   },
   {
     "id": "BMR",
     "name": "Basal Metabolic Rate",
     "category": "Research Parameters",
-    "aliases": ["Basal Metabolic Rate", "BMR", "Basal Metabolism"],
+    "evaluation": "direct",
+    "aliases": ["Basal Metabolic Rate", "BMR", "Basal Metabolism", "RMR"],
     "unit": "kcal",
     "unit_conversions": [
       { "from": "kJ", "multiply": 0.2390 }
     ],
     "ranges": {
-      "male": { "low": 1400, "high": 2000 },
-      "female": { "low": 1100, "high": 1600 }
+      "male": {
+        "18-29": { "low": 1600, "high": 2100 },
+        "30-39": { "low": 1550, "high": 2000 },
+        "40-49": { "low": 1500, "high": 1950 },
+        "50-59": { "low": 1450, "high": 1900 },
+        "60-69": { "low": 1400, "high": 1800 },
+        "70+":   { "low": 1300, "high": 1700 }
+      },
+      "female": {
+        "18-29": { "low": 1300, "high": 1700 },
+        "30-39": { "low": 1250, "high": 1650 },
+        "40-49": { "low": 1200, "high": 1600 },
+        "50-59": { "low": 1150, "high": 1550 },
+        "60-69": { "low": 1100, "high": 1500 },
+        "70+":   { "low": 1050, "high": 1400 }
+      }
     }
+  },
+  {
+    "id": "BMR_expected",
+    "name": "Expected BMR (Katch-McArdle)",
+    "category": "Research Parameters",
+    "evaluation": "informational",
+    "is_derived": true,
+    "computed_from": "370 + (21.6 * FFM_kg)",
+    "aliases": [],
+    "unit": "kcal",
+    "unit_conversions": []
   },
   {
     "id": "FFM",
     "name": "Fat Free Mass",
-    "category": "Research Parameters",
-    "aliases": ["Fat Free Mass", "FFM", "Lean Body Mass", "LBM"],
+    "category": "Body Composition",
+    "evaluation": "derived_input",
+    "derives": ["FFMI"],
+    "derives_formula": "FFM / height_m²",
+    "aliases": ["Fat Free Mass", "FFM", "Lean Body Mass", "LBM", "Fat-Free Mass"],
     "unit": "kg",
     "unit_conversions": [
       { "from": "lbs", "multiply": 0.4536 }
-    ],
-    "ranges": {
-      "male": { "low": 50.0, "high": 75.0 },
-      "female": { "low": 35.0, "high": 55.0 }
-    }
+    ]
   },
   {
     "id": "WaterPct",
-    "name": "Water Percentage",
+    "name": "Total Body Water Percentage",
     "category": "Body Composition",
-    "aliases": ["Water Percentage", "Water %", "Total Body Water %", "TBW %", "Body Water"],
+    "evaluation": "direct",
+    "aliases": ["Water Percentage", "Water %", "Total Body Water %", "TBW %", "Body Water %"],
     "unit": "%",
     "unit_conversions": [],
     "ranges": {
-      "male": { "low": 50.0, "high": 65.0 },
-      "female": { "low": 45.0, "high": 60.0 }
+      "male": {
+        "low": { "high": 50.0 },
+        "normal": { "low": 50.0, "high": 65.0 },
+        "high": { "low": 65.0 }
+      },
+      "female": {
+        "low": { "high": 45.0 },
+        "normal": { "low": 45.0, "high": 60.0 },
+        "high": { "low": 60.0 }
+      }
     }
   },
   {
     "id": "ProteinPct",
     "name": "Protein Percentage",
     "category": "Body Composition",
+    "evaluation": "informational",
+    "available_from": ["InBody"],
     "aliases": ["Protein Percentage", "Protein %", "Body Protein %"],
     "unit": "%",
-    "unit_conversions": [],
-    "ranges": {
-      "low": 16.0,
-      "high": 20.0
-    }
+    "unit_conversions": []
   },
   {
     "id": "BoneMass",
     "name": "Bone Mass",
     "category": "Body Composition",
+    "evaluation": "informational",
     "aliases": ["Bone Mass", "Bone Mineral Content", "BMC", "Minerals", "Bone Minerals"],
     "unit": "kg",
     "unit_conversions": [
@@ -159,12 +254,237 @@
     "id": "IdealWeight",
     "name": "Ideal Weight",
     "category": "Weight Control",
+    "evaluation": "informational",
     "aliases": ["Ideal Weight", "Target Weight", "Recommended Weight", "Ideal Body Weight"],
     "unit": "kg",
     "unit_conversions": [
       { "from": "lbs", "multiply": 0.4536 }
-    ],
-    "ranges": {},
-    "informational": true
+    ]
+  },
+  {
+    "id": "ECW_TBW",
+    "name": "Extracellular Water to Total Body Water Ratio",
+    "category": "Fluid Analysis",
+    "evaluation": "direct",
+    "available_from": ["InBody", "Seca"],
+    "aliases": ["ECW/TBW", "ECW Ratio", "Extracellular Water Ratio", "E/T Ratio"],
+    "unit": "ratio",
+    "unit_conversions": [],
+    "ranges": {
+      "normal": { "low": 0.360, "high": 0.390 },
+      "mild_imbalance": { "low": 0.390, "high": 0.400 },
+      "significant_imbalance": { "low": 0.400 }
+    },
+    "alert_thresholds": {
+      "critical_high": 0.420
+    }
+  },
+  {
+    "id": "PhaseAngle",
+    "name": "Phase Angle",
+    "category": "Cellular Health",
+    "evaluation": "direct",
+    "available_from": ["InBody", "Seca"],
+    "aliases": ["Phase Angle", "PhA", "PA", "Phasenwinkel"],
+    "unit": "degrees",
+    "unit_conversions": [],
+    "ranges": {
+      "male": {
+        "18-39": { "low": 6.5, "high": 9.0 },
+        "40-59": { "low": 5.5, "high": 8.0 },
+        "60+":   { "low": 4.5, "high": 7.0 }
+      },
+      "female": {
+        "18-39": { "low": 5.5, "high": 8.0 },
+        "40-59": { "low": 5.0, "high": 7.5 },
+        "60+":   { "low": 4.0, "high": 6.5 }
+      }
+    },
+    "alert_thresholds": {
+      "critical_low_male": 4.0,
+      "critical_low_female": 3.5
+    }
+  },
+  {
+    "id": "TBW",
+    "name": "Total Body Water",
+    "category": "Fluid Analysis",
+    "evaluation": "derived_input",
+    "derives": ["ECW_TBW"],
+    "aliases": ["Total Body Water", "TBW", "Gesamtkörperwasser"],
+    "unit": "L",
+    "unit_conversions": []
+  },
+  {
+    "id": "ECW",
+    "name": "Extracellular Water",
+    "category": "Fluid Analysis",
+    "evaluation": "derived_input",
+    "derives": ["ECW_TBW"],
+    "derives_formula": "ECW / TBW",
+    "aliases": ["Extracellular Water", "ECW", "Extrazelluläres Wasser"],
+    "unit": "L",
+    "unit_conversions": []
+  },
+  {
+    "id": "ICW",
+    "name": "Intracellular Water",
+    "category": "Fluid Analysis",
+    "evaluation": "informational",
+    "aliases": ["Intracellular Water", "ICW", "Intrazelluläres Wasser"],
+    "unit": "L",
+    "unit_conversions": []
+  },
+  {
+    "id": "SMI",
+    "name": "Skeletal Muscle Index",
+    "category": "Muscularity",
+    "evaluation": "direct",
+    "is_derived": true,
+    "computed_from": "SMM / height_m²",
+    "aliases": ["SMI", "Skeletal Muscle Index", "RSMI", "ASM Index", "ALMI"],
+    "unit": "kg/m²",
+    "unit_conversions": [],
+    "ranges": {
+      "male": {
+        "normal": { "low": 7.0 },
+        "low": { "low": 5.5, "high": 7.0 },
+        "critically_low": { "high": 5.5 }
+      },
+      "female": {
+        "normal": { "low": 5.7 },
+        "low": { "low": 4.5, "high": 5.7 },
+        "critically_low": { "high": 4.5 }
+      }
+    }
+  },
+  {
+    "id": "FFMI",
+    "name": "Fat Free Mass Index",
+    "category": "Muscularity",
+    "evaluation": "direct",
+    "is_derived": true,
+    "computed_from": "FFM / height_m²",
+    "aliases": ["FFMI", "Fat Free Mass Index", "Lean Mass Index"],
+    "unit": "kg/m²",
+    "unit_conversions": [],
+    "ranges": {
+      "male": {
+        "low": { "high": 17.4 },
+        "normal": { "low": 17.5, "high": 19.9 },
+        "high": { "low": 20.0, "high": 24.9 },
+        "physiological_ceiling": { "low": 25.0 }
+      },
+      "female": {
+        "low": { "high": 15.0 },
+        "normal": { "low": 15.0, "high": 17.5 },
+        "high": { "low": 17.5, "high": 21.9 },
+        "physiological_ceiling": { "low": 22.0 }
+      }
+    }
+  },
+  {
+    "id": "FMI",
+    "name": "Fat Mass Index",
+    "category": "Obesity Analysis",
+    "evaluation": "direct",
+    "is_derived": true,
+    "computed_from": "BFM / height_m²",
+    "aliases": ["FMI", "Fat Mass Index"],
+    "unit": "kg/m²",
+    "unit_conversions": [],
+    "ranges": {
+      "male": {
+        "underfat": { "high": 2.0 },
+        "normal": { "low": 2.0, "high": 6.5 },
+        "overfat": { "low": 6.6, "high": 8.9 },
+        "obese": { "low": 9.0 }
+      },
+      "female": {
+        "underfat": { "high": 3.5 },
+        "normal": { "low": 3.5, "high": 9.4 },
+        "overfat": { "low": 9.5, "high": 12.9 },
+        "obese": { "low": 13.0 }
+      }
+    }
+  },
+  {
+    "id": "SegmentalLean_LA",
+    "name": "Segmental Lean Mass — Left Arm",
+    "category": "Segmental Analysis",
+    "evaluation": "derived_input",
+    "derives": ["LimbSymmetry_Arms"],
+    "aliases": ["Left Arm Lean", "L.Arm Lean", "Segmental Lean Left Arm"],
+    "unit": "kg",
+    "unit_conversions": []
+  },
+  {
+    "id": "SegmentalLean_RA",
+    "name": "Segmental Lean Mass — Right Arm",
+    "category": "Segmental Analysis",
+    "evaluation": "derived_input",
+    "derives": ["LimbSymmetry_Arms"],
+    "aliases": ["Right Arm Lean", "R.Arm Lean", "Segmental Lean Right Arm"],
+    "unit": "kg",
+    "unit_conversions": []
+  },
+  {
+    "id": "SegmentalLean_LL",
+    "name": "Segmental Lean Mass — Left Leg",
+    "category": "Segmental Analysis",
+    "evaluation": "derived_input",
+    "derives": ["LimbSymmetry_Legs"],
+    "aliases": ["Left Leg Lean", "L.Leg Lean", "Segmental Lean Left Leg"],
+    "unit": "kg",
+    "unit_conversions": []
+  },
+  {
+    "id": "SegmentalLean_RL",
+    "name": "Segmental Lean Mass — Right Leg",
+    "category": "Segmental Analysis",
+    "evaluation": "derived_input",
+    "derives": ["LimbSymmetry_Legs"],
+    "aliases": ["Right Leg Lean", "R.Leg Lean", "Segmental Lean Right Leg"],
+    "unit": "kg",
+    "unit_conversions": []
+  },
+  {
+    "id": "SegmentalLean_Trunk",
+    "name": "Segmental Lean Mass — Trunk",
+    "category": "Segmental Analysis",
+    "evaluation": "informational",
+    "aliases": ["Trunk Lean", "Segmental Lean Trunk"],
+    "unit": "kg",
+    "unit_conversions": []
+  },
+  {
+    "id": "LimbSymmetry_Arms",
+    "name": "Arm Lean Mass Symmetry",
+    "category": "Segmental Analysis",
+    "evaluation": "direct",
+    "is_derived": true,
+    "computed_from": "abs(LA - RA) / max(LA, RA) * 100",
+    "aliases": [],
+    "unit": "%",
+    "unit_conversions": [],
+    "ranges": {
+      "symmetric":  { "high": 15.0 },
+      "asymmetric": { "low": 15.0 }
+    }
+  },
+  {
+    "id": "LimbSymmetry_Legs",
+    "name": "Leg Lean Mass Symmetry",
+    "category": "Segmental Analysis",
+    "evaluation": "direct",
+    "is_derived": true,
+    "computed_from": "abs(LL - RL) / max(LL, RL) * 100",
+    "aliases": [],
+    "unit": "%",
+    "unit_conversions": [],
+    "ranges": {
+      "symmetric":  { "high": 15.0 },
+      "asymmetric": { "low": 15.0 }
+    }
   }
 ]

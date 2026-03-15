@@ -11,6 +11,7 @@ pub struct BodyCompositionInput {
     pub file_bytes: Vec<u8>,
     pub sex: Option<String>,
     pub age: Option<u32>,
+    pub height_cm: Option<f64>,
 }
 
 /// Import a body composition PDF: save to temp, call run_body_composition.py for extraction.
@@ -42,6 +43,9 @@ pub fn import(input: BodyCompositionInput) -> Result<RawData, PipelineError> {
     }
     if let Some(age) = input.age {
         cmd.arg("--age").arg(age.to_string());
+    }
+    if let Some(height) = input.height_cm {
+        cmd.arg("--height").arg(height.to_string());
     }
 
     let output = cmd.output().map_err(|e| {

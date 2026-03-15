@@ -317,6 +317,7 @@ pub async fn run_body_composition(
     file_bytes: Vec<u8>,
     sex: Option<String>,
     age: Option<u32>,
+    height_cm: Option<f64>,
 ) -> Result<String, String> {
     let node = AnthropometryNode;
     let input = BodyCompositionInput {
@@ -324,6 +325,7 @@ pub async fn run_body_composition(
         file_bytes,
         sex,
         age,
+        height_cm,
     };
 
     let contract = pipeline::run_pipeline(&node, input).map_err(|e| e.to_string())?;

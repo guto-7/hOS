@@ -2,7 +2,7 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import styles from "./AnthropometryContent.module.css";
 
-/* ── Types matching OutputContract / BodyCompositionData from Rust ── */
+/* ── Types ── */
 
 interface DeviationMetric {
   value: number;
@@ -16,13 +16,53 @@ interface DeviationMetric {
 interface BodyCompositionMarker {
   name: string;
   original_name: string | null;
+  category: string | null;
   value: number;
   unit: string;
   original_value: number | null;
   original_unit: string | null;
   unit_converted: boolean;
   adjustment_note: string | null;
+  canonical_tier: string | null;
+  is_derived: boolean;
+  evaluation_type: string | null;
   deviation: DeviationMetric;
+}
+
+interface PythonDomainScore {
+  domain: string;
+  label: string;
+  score: number;
+  grade: string;
+  markers_used: string[];
+  notes: string[];
+}
+
+interface PythonPhenotype {
+  id: string;
+  label: string;
+  description: string;
+  confidence: "high" | "moderate" | "low";
+  contributing_signals: string[];
+}
+
+interface PythonSignal {
+  id: string;
+  label: string;
+  detail: string;
+  severity: "info" | "warning" | "concern";
+  markers: string[];
+}
+
+interface PythonEvaluation {
+  body_score: number;
+  body_score_label: "Optimal" | "Good" | "Needs Attention" | "At Risk";
+  domain_scores: PythonDomainScore[];
+  phenotype: PythonPhenotype | null;
+  signals: PythonSignal[];
+  certainty_grade: "high" | "moderate" | "low" | "insufficient";
+  certainty_note: string;
+  missing_for_full_eval: string[];
 }
 
 interface BodyCompositionData {
@@ -33,6 +73,7 @@ interface BodyCompositionData {
   };
   device: string | null;
   collection_date: string | null;
+  python_evaluation: PythonEvaluation | null;
 }
 
 interface CertaintyGrade {
@@ -79,19 +120,165 @@ interface HistoryRecord {
 
 type ProcessingStatus = "loading" | "idle" | "processing" | "done" | "error";
 
-function formatRefRange(low: number | null, high: number | null): string {
-  if (low !== null && high !== null) return `${low} – ${high}`;
-  if (low !== null) return `> ${low}`;
-  if (high !== null) return `< ${high}`;
-  return "—";
+/* ── Tier display ── */
+
+const TIER_DISPLAY: Record<string, [string, string]> = {
+  underfat:              ["Low Body Fat",           "yellow"],
+  healthy:               ["Healthy",               "green"],
+  overfat:               ["Elevated Body Fat",      "orange"],
+  obese:                 ["Obese",                 "red"],
+  normal:                ["Normal",                "green"],
+  sufficient:            ["Sufficient",            "green"],
+  optimal:               ["Optimal",               "green"],
+  symmetric:             ["Symmetric",             "green"],
+  asymmetric:            ["Asymmetric",            "orange"],
+  elevated:              ["Elevated",              "orange"],
+  high_risk:             ["High Risk",             "red"],
+  mild_imbalance:        ["Mild Imbalance",        "yellow"],
+  significant_imbalance: ["Significant Imbalance", "red"],
+  low:                   ["Low",                   "orange"],
+  critically_low:        ["Critically Low",        "red"],
+  high:                  ["High",                  "blue"],
+  physiological_ceiling: ["Above Natural Ceiling", "red"],
+  underweight:           ["Underweight",           "yellow"],
+  overweight:            ["Overweight",            "orange"],
+};
+
+const COLOR_CLASS: Record<string, string> = {
+  green:  styles.flagGreen,
+  yellow: styles.flagYellow,
+  orange: styles.flagOrange,
+  red:    styles.flagRed,
+  blue:   styles.flagBlue,
+  grey:   styles.flagGrey,
+};
+
+function getFlagDisplay(m: BodyCompositionMarker): [string, string] {
+  const { flag } = m.deviation;
+  if (flag === "Critical") return ["Critical", "red"];
+  if (m.canonical_tier) {
+    return TIER_DISPLAY[m.canonical_tier] ?? [
+      m.canonical_tier.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+      "grey",
+    ];
+  }
+  if (flag === "Low")    return ["Low",    "orange"];
+  if (flag === "High")   return ["High",   "orange"];
+  if (flag === "Normal") return ["Normal", "green"];
+  return ["—", "grey"];
 }
 
-function flagClass(flag: string, s: typeof styles): string {
-  if (flag === "Critical") return s.flagCritical;
-  if (flag === "High" || flag === "Low") return s.flagAbnormal;
-  if (flag === "Info") return s.flagInfo;
-  return s.flagOptimal;
+function getRangeDisplay(m: BodyCompositionMarker): string {
+  const { reference_low: low, reference_high: high } = m.deviation;
+  if (low === null && high === null) return "—";
+  if (low === null)  return `< ${high}`;
+  if (high === null) return `≥ ${low}`;
+  return `${low} – ${high}`;
 }
+
+function hasResolvedRange(m: BodyCompositionMarker): boolean {
+  return (
+    m.canonical_tier !== null ||
+    m.deviation.reference_low !== null ||
+    m.deviation.reference_high !== null
+  );
+}
+
+function isConcerning(m: BodyCompositionMarker): boolean {
+  const { flag } = m.deviation;
+  if (flag === "Critical" || flag === "Low" || flag === "High") return true;
+  if (m.canonical_tier) {
+    const [, color] = TIER_DISPLAY[m.canonical_tier] ?? ["", "grey"];
+    return color === "red" || color === "orange" || color === "yellow";
+  }
+  return false;
+}
+
+/* ── Bucketing ── */
+
+interface Buckets {
+  evaluated: BodyCompositionMarker[];
+  unresolved: BodyCompositionMarker[];
+  raw: BodyCompositionMarker[];
+}
+
+function bucketMarkers(markers: BodyCompositionMarker[]): Buckets {
+  const evaluated: BodyCompositionMarker[] = [];
+  const unresolved: BodyCompositionMarker[] = [];
+  const raw: BodyCompositionMarker[] = [];
+  for (const m of markers) {
+    if (m.evaluation_type === "direct") {
+      if (hasResolvedRange(m)) evaluated.push(m);
+      else unresolved.push(m);
+    } else {
+      raw.push(m);
+    }
+  }
+  return { evaluated, unresolved, raw };
+}
+
+/* ── Category grouping ── */
+
+const CATEGORY_ORDER = [
+  "Obesity Analysis",
+  "Muscularity",
+  "Fluid Analysis",
+  "Cellular Health",
+  "Segmental Analysis",
+];
+
+function groupByCategory(markers: BodyCompositionMarker[]): [string, BodyCompositionMarker[]][] {
+  const grouped: Record<string, BodyCompositionMarker[]> = {};
+  for (const m of markers) {
+    const cat = m.category ?? "Other";
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(m);
+  }
+  const ordered: [string, BodyCompositionMarker[]][] = [];
+  for (const cat of CATEGORY_ORDER) {
+    if (grouped[cat]) ordered.push([cat, grouped[cat]]);
+  }
+  for (const [cat, items] of Object.entries(grouped)) {
+    if (!CATEGORY_ORDER.includes(cat)) ordered.push([cat, items]);
+  }
+  return ordered;
+}
+
+/* ── Domain score helpers ── */
+
+const GRADE_COLOR: Record<string, string> = {
+  // Legacy grade strings
+  optimal:    styles.flagGreen,
+  good:       styles.flagGreen,
+  borderline: styles.flagYellow,
+  poor:       styles.flagOrange,
+  critical:   styles.flagRed,
+  // New status labels (adiposity, muscularity, fluid health, metabolic health)
+  Optimal:                    styles.flagGreen,
+  Normal:                     styles.flagGreen,
+  Good:                       styles.flagGreen,
+  Moderate:                   styles.flagYellow,
+  "Below Average":            styles.flagYellow,
+  "Asymmetry Detected":       styles.flagYellow,
+  "Cellular Health Concern":  styles.flagYellow,
+  Low:                        styles.flagOrange,
+  Elevated:                   styles.flagOrange,
+  Suppressed:                 styles.flagOrange,
+  "Mild Imbalance":           styles.flagOrange,
+  "High Risk":                styles.flagRed,
+  "Critically Low":           styles.flagRed,
+  "Significant Imbalance":    styles.flagRed,
+  "Above Natural Ceiling":    styles.flagRed,
+  Critical:                   styles.flagRed,
+};
+
+const SEVERITY_COLOR: Record<string, string> = {
+  info:    styles.flagBlue,
+  warning: styles.flagYellow,
+  concern: styles.flagOrange,
+};
+
+/* ── Component ── */
 
 function AnthropometryContent() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -102,6 +289,19 @@ function AnthropometryContent() {
   const [currentFile, setCurrentFile] = useState<string>("");
   const [history, setHistory] = useState<HistoryRecord[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+
+  // Profile state — optional; passed to pipeline for demographic adjustment
+  const [profileSex, setProfileSex] = useState<"" | "male" | "female">("");
+  const [profileAge, setProfileAge] = useState<string>("");
+  const [profileHeight, setProfileHeight] = useState<string>("");
+
+  // Refs so processFile always reads the latest values, regardless of closure age.
+  // Updated SYNCHRONOUSLY in onChange handlers — not via useEffect — to avoid the
+  // async-after-paint gap that could cause a stale value if the user changes sex and
+  // immediately drops a file within the same browser frame.
+  const profileSexRef = useRef<"" | "male" | "female">("");
+  const profileAgeRef = useRef<string>("");
+  const profileHeightRef = useRef<string>("");
 
   const loadHistory = useCallback(async () => {
     try {
@@ -149,12 +349,18 @@ function AnthropometryContent() {
     try {
       const arrayBuffer = await file.arrayBuffer();
       const bytes = Array.from(new Uint8Array(arrayBuffer));
+      // Read from refs to guarantee latest values even if state update and file
+      // drop race against each other.
+      const currentSex = profileSexRef.current || null;
+      const currentAge = profileAgeRef.current ? parseInt(profileAgeRef.current, 10) : null;
+      const currentHeight = profileHeightRef.current ? parseFloat(profileHeightRef.current) : null;
 
       const jsonString = await invoke<string>("run_body_composition", {
         fileName: file.name,
         fileBytes: bytes,
-        sex: null,
-        age: null,
+        sex: currentSex,
+        age: currentAge && !isNaN(currentAge) ? currentAge : null,
+        heightCm: currentHeight && !isNaN(currentHeight) ? currentHeight : null,
       });
 
       const parsed: OutputContract = JSON.parse(jsonString);
@@ -178,14 +384,11 @@ function AnthropometryContent() {
     [processFile]
   );
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragOver(false);
-      handleFiles(e.dataTransfer.files);
-    },
-    [handleFiles]
-  );
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    handleFiles(e.dataTransfer.files);
+  }, [handleFiles]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -207,9 +410,12 @@ function AnthropometryContent() {
     setShowHistory(false);
   };
 
-  const markers = contract?.unified_data.markers ?? [];
-  const flaggedMarkers = markers.filter((m) => m.deviation.flag !== "Normal" && m.deviation.flag !== "Info");
+  const allMarkers = contract?.unified_data.markers ?? [];
+  const { evaluated, unresolved, raw } = bucketMarkers(allMarkers);
+  const grouped = groupByCategory(evaluated);
+  const concerningCount = evaluated.filter(isConcerning).length;
   const criticalFlags = contract?.evaluation.critical_flags ?? [];
+  const pyEval = contract?.unified_data.python_evaluation ?? null;
 
   return (
     <>
@@ -226,15 +432,11 @@ function AnthropometryContent() {
               <span className={styles.historyLabel}>
                 {history.length} past upload{history.length > 1 ? "s" : ""} available
               </span>
-              <button
-                className={styles.historyButton}
-                onClick={() => setShowHistory(!showHistory)}
-              >
+              <button className={styles.historyButton} onClick={() => setShowHistory(!showHistory)}>
                 {showHistory ? "Hide history" : "View history"}
               </button>
             </div>
           )}
-
           {showHistory && history.length > 0 && (
             <div className={styles.historyList}>
               {history.map((r) => (
@@ -246,14 +448,63 @@ function AnthropometryContent() {
                   <span className={styles.historyName}>{r.original_name ?? "Unknown"}</span>
                   <span className={styles.historyMeta}>
                     {r.collection_date && `${r.collection_date} · `}
-                    {r.critical_flags_count > 0
-                      ? `${r.critical_flags_count} critical`
-                      : "No critical flags"}
+                    {r.critical_flags_count > 0 ? `${r.critical_flags_count} critical` : "No critical flags"}
                   </span>
                 </button>
               ))}
             </div>
           )}
+
+          {/* Profile inputs */}
+          <div className={styles.profileRow}>
+            <label className={styles.profileField}>
+              <span className={styles.profileLabel}>Sex</span>
+              <select
+                className={styles.profileSelect}
+                value={profileSex}
+                onChange={(e) => {
+                  const val = e.target.value as "" | "male" | "female";
+                  profileSexRef.current = val;
+                  setProfileSex(val);
+                }}
+              >
+                <option value="">—</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+            </label>
+            <label className={styles.profileField}>
+              <span className={styles.profileLabel}>Age</span>
+              <input
+                type="number"
+                className={styles.profileInput}
+                placeholder="e.g. 32"
+                min={1}
+                max={120}
+                value={profileAge}
+                onChange={(e) => {
+                  profileAgeRef.current = e.target.value;
+                  setProfileAge(e.target.value);
+                }}
+              />
+            </label>
+            <label className={styles.profileField}>
+              <span className={styles.profileLabel}>Height (cm)</span>
+              <input
+                type="number"
+                className={styles.profileInput}
+                placeholder="e.g. 175"
+                min={50}
+                max={250}
+                value={profileHeight}
+                onChange={(e) => {
+                  profileHeightRef.current = e.target.value;
+                  setProfileHeight(e.target.value);
+                }}
+              />
+            </label>
+            <span className={styles.profileHint}>Optional — improves range resolution and derived metrics</span>
+          </div>
 
           <div
             className={`${styles.dropzone} ${isDragOver ? styles.dropzoneActive : ""}`}
@@ -263,9 +514,7 @@ function AnthropometryContent() {
             onClick={handleClick}
             role="button"
             tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") handleClick();
-            }}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleClick(); }}
           >
             <input
               ref={fileInputRef}
@@ -295,9 +544,7 @@ function AnthropometryContent() {
       {status === "processing" && (
         <div className={styles.statusCard}>
           <p className={styles.statusText}>Processing {currentFile}...</p>
-          <p className={styles.statusHint}>
-            Running import, unification, and evaluation pipeline
-          </p>
+          <p className={styles.statusHint}>Running import, unification, and evaluation pipeline</p>
         </div>
       )}
 
@@ -305,57 +552,49 @@ function AnthropometryContent() {
         <div className={styles.statusCard}>
           <p className={styles.errorText}>Failed to process PDF</p>
           <p className={styles.statusHint}>{errorMsg}</p>
-          <button className={styles.retryButton} onClick={reset}>
-            Try again
-          </button>
+          <button className={styles.retryButton} onClick={reset}>Try again</button>
         </div>
       )}
 
       {status === "done" && contract && (
         <>
+          {/* Summary bar */}
           <div className={styles.summaryBar}>
             <span className={styles.summaryFile}>{currentFile}</span>
             <span className={styles.summaryStats}>
-              {markers.length} markers &middot;{" "}
-              {flaggedMarkers.length} flagged
+              {evaluated.length} evaluated &middot;{" "}
+              {concerningCount > 0 ? `${concerningCount} flagged` : "all clear"}
             </span>
             <div className={styles.summaryActions}>
               {history.length > 1 && (
-                <button
-                  className={styles.historyToggle}
-                  onClick={() => setShowHistory(!showHistory)}
-                >
+                <button className={styles.historyToggle} onClick={() => setShowHistory(!showHistory)}>
                   History ({history.length})
                 </button>
               )}
-              <button className={styles.uploadAnother} onClick={reset}>
-                Upload new
-              </button>
+              <button className={styles.uploadAnother} onClick={reset}>Upload new</button>
             </div>
           </div>
 
+          {/* History dropdown */}
           {showHistory && history.length > 0 && (
             <div className={styles.historyList}>
               {history.map((r) => (
                 <button
                   key={r.source_hash}
-                  className={`${styles.historyItem} ${
-                    contract.metadata.source_hash === r.source_hash ? styles.historyItemActive : ""
-                  }`}
+                  className={`${styles.historyItem} ${contract.metadata.source_hash === r.source_hash ? styles.historyItemActive : ""}`}
                   onClick={() => loadResult(r.source_hash, r.original_name ?? "Unknown")}
                 >
                   <span className={styles.historyName}>{r.original_name ?? "Unknown"}</span>
                   <span className={styles.historyMeta}>
                     {r.collection_date && `${r.collection_date} · `}
-                    {r.critical_flags_count > 0
-                      ? `${r.critical_flags_count} critical`
-                      : "No critical flags"}
+                    {r.critical_flags_count > 0 ? `${r.critical_flags_count} critical` : "No critical flags"}
                   </span>
                 </button>
               ))}
             </div>
           )}
 
+          {/* Critical banner */}
           {criticalFlags.length > 0 && (
             <div className={styles.warningBanner}>
               <strong>{criticalFlags.length} critical flag{criticalFlags.length > 1 ? "s" : ""}:</strong>
@@ -363,39 +602,181 @@ function AnthropometryContent() {
             </div>
           )}
 
-          <table className={styles.resultsTable}>
-            <thead>
-              <tr>
-                <th>Marker</th>
-                <th>Value</th>
-                <th>Unit</th>
-                <th>Reference Range</th>
-                <th>Flag</th>
-              </tr>
-            </thead>
-            <tbody>
-              {markers.map((m, i) => (
-                <tr
-                  key={`${m.name}-${i}`}
-                  className={
-                    m.deviation.flag !== "Normal" ? styles.rowFlagged : ""
-                  }
-                >
-                  <td>{m.name}</td>
-                  <td className={styles.mono}>{m.value}</td>
-                  <td className={styles.mono}>{m.unit}</td>
-                  <td className={styles.mono}>
-                    {formatRefRange(m.deviation.reference_low, m.deviation.reference_high)}
-                  </td>
-                  <td>
-                    <span className={flagClass(m.deviation.flag, styles)}>
-                      {m.deviation.flag === "Info" ? "—" : m.deviation.flag}
+          {/* Stage 3 — Body Score headline */}
+          {pyEval && pyEval.body_score != null && (
+            <div className={styles.bodyScoreBar}>
+              <div className={styles.bodyScoreContent}>
+                <span className={styles.bodyScoreTitle}>Body Score</span>
+                <div className={styles.bodyScoreLeft}>
+                  <span className={styles.bodyScoreNum}>{pyEval.body_score}</span>
+                  <span className={styles.bodyScoreSlash}> / 100</span>
+                  <span className={`${styles.bodyScoreLabel} ${
+                    pyEval.body_score >= 85 ? styles.flagGreen :
+                    pyEval.body_score >= 70 ? styles.flagGreen :
+                    pyEval.body_score >= 50 ? styles.flagOrange :
+                    styles.flagRed
+                  }`}>
+                    {pyEval.body_score_label}
+                  </span>
+                </div>
+              </div>
+              {pyEval.certainty_grade === "low" || pyEval.certainty_grade === "insufficient" ? (
+                <span className={styles.bodyScoreCaveat}>Limited data</span>
+              ) : null}
+            </div>
+          )}
+
+          {/* Stage 3 — Domain score cards */}
+          {pyEval && pyEval.domain_scores.length > 0 && (
+            <div className={styles.domainGrid}>
+              {pyEval.domain_scores.map((d) => (
+                <div key={d.domain} className={styles.domainCard}>
+                  <div className={styles.domainCardHeader}>
+                    <span className={styles.domainLabel}>{d.label}</span>
+                    <span className={`${styles.domainGrade} ${GRADE_COLOR[d.grade] ?? styles.flagGrey}`}>
+                      {d.grade}
                     </span>
-                  </td>
-                </tr>
+                  </div>
+                  {d.notes.length > 0 && (
+                    <ul className={styles.domainNotes}>
+                      {d.notes.slice(0, 3).map((n, i) => (
+                        <li key={i} className={styles.domainNote}>{n}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          )}
+
+          {/* Stage 3 — Phenotype */}
+          {pyEval?.phenotype && (
+            <div className={styles.phenotypeCard}>
+              <div className={styles.phenotypeHeader}>
+                <span className={styles.phenotypeLabel}>{pyEval.phenotype.label}</span>
+                <span className={`${styles.phenotypeConfidence} ${
+                  pyEval.phenotype.confidence === "high" ? styles.flagOrange :
+                  pyEval.phenotype.confidence === "moderate" ? styles.flagYellow :
+                  styles.flagGrey
+                }`}>
+                  {pyEval.phenotype.confidence} confidence
+                </span>
+              </div>
+              <p className={styles.phenotypeDescription}>{pyEval.phenotype.description}</p>
+              {pyEval.phenotype.contributing_signals.length > 0 && (
+                <div className={styles.phenotypeSignals}>
+                  {pyEval.phenotype.contributing_signals.map((s) => (
+                    <span key={s} className={styles.phenotypeSignalTag}>{s}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Stage 3 — Signals */}
+          {pyEval && pyEval.signals.length > 0 && (
+            <div className={styles.signalsList}>
+              {pyEval.signals.map((s) => (
+                <div key={s.id} className={`${styles.signalItem} ${styles[`signal_${s.severity}`]}`}>
+                  <div className={styles.signalHeader}>
+                    <span className={`${styles.signalLabel} ${SEVERITY_COLOR[s.severity] ?? styles.flagGrey}`}>
+                      {s.label}
+                    </span>
+                    <span className={styles.signalSeverity}>{s.severity}</span>
+                  </div>
+                  <p className={styles.signalDetail}>{s.detail}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Main evaluated table */}
+          {evaluated.length > 0 && (
+            <table className={styles.resultsTable}>
+              <thead>
+                <tr>
+                  <th>Marker</th>
+                  <th>Value</th>
+                  <th>Unit</th>
+                  <th>Reference Range</th>
+                  <th>Flag</th>
+                </tr>
+              </thead>
+              <tbody>
+                {grouped.map(([category, categoryMarkers]) => (
+                  <>
+                    <tr key={`cat-${category}`} className={styles.categoryRow}>
+                      <td colSpan={5} className={styles.categoryHeader}>{category}</td>
+                    </tr>
+                    {categoryMarkers.map((m, i) => {
+                      const [flagLabel, flagColor] = getFlagDisplay(m);
+                      return (
+                        <tr
+                          key={`${m.name}-${i}`}
+                          className={isConcerning(m) ? styles.rowFlagged : ""}
+                        >
+                          <td>
+                            <span className={styles.markerName}>{m.name}</span>
+                            {m.is_derived && (
+                              <span className={styles.derivedBadge}>computed</span>
+                            )}
+                          </td>
+                          <td className={styles.mono}>{m.value}</td>
+                          <td className={styles.mono}>{m.unit}</td>
+                          <td
+                            className={styles.mono}
+                            title={m.adjustment_note ?? undefined}
+                          >
+                            {getRangeDisplay(m)}
+                            {m.adjustment_note && (
+                              <span className={styles.adjustmentDot} title={m.adjustment_note}>·</span>
+                            )}
+                          </td>
+                          <td>
+                            <span className={COLOR_CLASS[flagColor] ?? styles.flagGrey}>
+                              {flagLabel}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {/* Unresolved — needs patient context */}
+          {unresolved.length > 0 && (
+            <div className={styles.unresolvedSection}>
+              <p className={styles.unresolvedTitle}>
+                {unresolved.length} metric{unresolved.length > 1 ? "s" : ""} could not be evaluated
+              </p>
+              <p className={styles.unresolvedHint}>
+                Age, sex, or height is required to resolve reference ranges for these metrics.
+              </p>
+              <div className={styles.unresolvedList}>
+                {unresolved.map((m) => (
+                  <span key={m.name} className={styles.unresolvedItem}>{m.name}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Raw measurements — always visible */}
+          {raw.length > 0 && (
+            <div className={styles.rawSection}>
+              <p className={styles.rawSectionTitle}>Raw Measurements</p>
+              <div className={styles.rawGrid}>
+                {raw.map((m) => (
+                  <div key={m.name} className={styles.rawItem}>
+                    <span className={styles.rawName}>{m.name}</span>
+                    <span className={styles.rawValue}>{m.value} {m.unit}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
     </>

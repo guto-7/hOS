@@ -16,6 +16,7 @@ Usage:
 import argparse
 import json
 import sys
+from datetime import date
 from pathlib import Path
 
 from body_composition.importing import (
@@ -32,6 +33,7 @@ from body_composition.unifying import (
     compute_flags,
 )
 from body_composition.unifying.ranger import UserProfile
+from body_composition.evaluating import evaluate
 
 
 def run_pipeline(
@@ -40,6 +42,7 @@ def run_pipeline(
     profile: UserProfile | None = None,
     quiet: bool = False,
     stage1_only: bool = False,
+    stage2_only: bool = False,
 ):
     """
     Run the full Stage 1 (Importing) + Stage 2 (Unifying) pipeline.
@@ -47,6 +50,12 @@ def run_pipeline(
     """
     if profile is None:
         profile = UserProfile()
+
+    # Normalize sex to lowercase and strip whitespace (defensive)
+    if profile.sex:
+        profile.sex = profile.sex.lower().strip()
+        if profile.sex not in ("male", "female"):
+            profile.sex = None
 
     path = Path(pdf_path)
 
@@ -143,6 +152,7 @@ def run_pipeline(
     # Step 7: Range resolution
     if not quiet:
         print("[7/8] Resolving reference ranges...", file=sys.stderr)
+        print(f"       [DEBUG] profile.sex={profile.sex!r}, profile.age={profile.age!r}", file=sys.stderr)
     ranged = resolve_ranges(normalised, profile)
     ranges_resolved = sum(1 for m in ranged if m.canonical_ref_low is not None or m.canonical_ref_high is not None)
     if not quiet:
@@ -155,20 +165,147 @@ def run_pipeline(
         print("[8/8] Computing flags and deviations...", file=sys.stderr)
     flagged = compute_flags(ranged)
 
+    # --- BMR lean mass cross-reference ---
+    # If BMR is elevated but lean mass is also elevated, override the HIGH flag to
+    # OPTIMAL and attach an explanatory adjustment note.  If BMR is low alongside
+    # low muscle mass, keep the LOW flag but add context.
+    _bmr_m = next((m for m in flagged if m.marker_id == "BMR"), None)
+    if _bmr_m is not None:
+        def _lean_tier(marker_id: str) -> str | None:
+            lm = next((x for x in flagged if x.marker_id == marker_id), None)
+            if lm is None:
+                return None
+            if lm.flag.startswith("TIER:"):
+                return lm.flag[5:]
+            return None
+
+        _ffmi_tier = _lean_tier("FFMI")
+        _smi_tier  = _lean_tier("SMI")
+
+        if _bmr_m.flag == "HIGH":
+            if _ffmi_tier in ("high", "normal") or _smi_tier == "normal":
+                _bmr_m.adjustment_note = "Above age average — consistent with high lean mass"
+                _bmr_m.flag = "OPTIMAL"
+            else:
+                _bmr_m.adjustment_note = "Above age average for age group"
+        elif _bmr_m.flag == "LOW":
+            if _smi_tier in ("low", "critically_low"):
+                _bmr_m.adjustment_note = "Below age average — consistent with low muscle mass"
+            else:
+                _bmr_m.adjustment_note = "Below age average for age group"
+        elif _bmr_m.flag == "OPTIMAL":
+            ref_low = _bmr_m.canonical_ref_low
+            ref_high = _bmr_m.canonical_ref_high
+            if ref_low is not None and ref_high is not None:
+                _bmr_m.adjustment_note = f"Within age range ({int(ref_low)}–{int(ref_high)} kcal)"
+
+    # Flags that represent a concern worth surfacing
+    _CONCERNING = {"LOW", "HIGH", "CRITICAL_LOW", "CRITICAL_HIGH"}
+    _CONCERNING_TIERS = {
+        "obese", "overfat", "overweight", "elevated", "high_risk",
+        "underfat", "underweight", "low", "critically_low",
+        "mild_imbalance", "significant_imbalance", "physiological_ceiling",
+    }
+
+    def _is_concerning(flag: str) -> bool:
+        if flag in _CONCERNING:
+            return True
+        if flag.startswith("TIER:") and flag[5:] in _CONCERNING_TIERS:
+            return True
+        return False
+
     # Compute summary
     total = len(flagged)
     matched = sum(1 for m in flagged if m.marker_id is not None)
     flag_counts = {}
     for m in flagged:
         flag_counts[m.flag] = flag_counts.get(m.flag, 0) + 1
-    abnormal = total - flag_counts.get("OPTIMAL", 0)
+    abnormal = sum(1 for m in flagged if m.marker_id and _is_concerning(m.flag))
 
     if not quiet:
         print(f"       {abnormal} markers flagged out of {matched} matched", file=sys.stderr)
 
+    flagged_dicts = [m.to_dict() for m in flagged]
+
+    # --- STAGE 2 ONLY ---
+    if stage2_only:
+        return {
+            "success": True,
+            "stages_completed": ["importing", "unifying"],
+            "record": {
+                "file_hash": storage.file_hash,
+                "stored_path": str(storage.stored_path),
+                "original_name": storage.original_name,
+                "is_duplicate": storage.is_duplicate,
+                "device": parse_result.device,
+                "test_date": parse_result.test_date,
+                "page_count": extraction.page_count,
+            },
+            "profile": {
+                "sex": profile.sex,
+                "age": profile.age,
+                "height_cm": profile.height_cm,
+            },
+            "markers": flagged_dicts,
+            "summary": {
+                "total_extracted": total,
+                "matched": matched,
+                "unmatched": total - matched,
+                "flagged": abnormal,
+                "flag_breakdown": flag_counts,
+            },
+        }
+
+    # --- STAGE 3: EVALUATING ---
+
+    if not quiet:
+        print("[Stage 3] Running clinical evaluation...", file=sys.stderr)
+    eval_result = evaluate(flagged_dicts)
+
+    def _domain_to_dict(d):
+        return {
+            "domain": d.domain,
+            "label": d.label,
+            "score": d.score,
+            "grade": d.grade,
+            "markers_used": d.markers_used,
+            "notes": d.notes,
+        }
+
+    def _signal_to_dict(s):
+        return {
+            "id": s.id,
+            "label": s.label,
+            "detail": s.detail,
+            "severity": s.severity,
+            "markers": s.markers,
+        }
+
+    evaluation_dict = {
+        "body_score": eval_result.body_score,
+        "body_score_label": eval_result.body_score_label,
+        "domain_scores": [_domain_to_dict(d) for d in eval_result.domain_scores],
+        "phenotype": {
+            "id": eval_result.phenotype.id,
+            "label": eval_result.phenotype.label,
+            "description": eval_result.phenotype.description,
+            "confidence": eval_result.phenotype.confidence,
+            "contributing_signals": eval_result.phenotype.contributing_signals,
+        } if eval_result.phenotype else None,
+        "signals": [_signal_to_dict(s) for s in eval_result.signals],
+        "certainty_grade": eval_result.certainty_grade,
+        "certainty_note": eval_result.certainty_note,
+        "missing_for_full_eval": eval_result.missing_for_full_eval,
+    }
+
+    if not quiet:
+        grade = eval_result.certainty_grade
+        ph = eval_result.phenotype.label if eval_result.phenotype else "none"
+        print(f"       Certainty: {grade} | Phenotype: {ph} | Signals: {len(eval_result.signals)}", file=sys.stderr)
+
     result = {
         "success": True,
-        "stages_completed": ["importing", "unifying"],
+        "stages_completed": ["importing", "unifying", "evaluating"],
         "record": {
             "file_hash": storage.file_hash,
             "stored_path": str(storage.stored_path),
@@ -181,8 +318,10 @@ def run_pipeline(
         "profile": {
             "sex": profile.sex,
             "age": profile.age,
+            "height_cm": profile.height_cm,
         },
-        "markers": [m.to_dict() for m in flagged],
+        "markers": flagged_dicts,
+        "evaluation": evaluation_dict,
         "summary": {
             "total_extracted": total,
             "matched": matched,
@@ -214,19 +353,38 @@ def main():
         action="store_true",
         help="Run Stage 1 (Importing) only",
     )
+    parser.add_argument(
+        "--stage2-only",
+        action="store_true",
+        help="Run Stage 1 + Stage 2 (skip Stage 3 evaluation)",
+    )
     parser.add_argument("--sex", choices=["male", "female"], help="User sex")
-    parser.add_argument("--age", type=int, help="User age")
+    parser.add_argument("--age", type=int, help="User age (converted to DOB internally)")
+    parser.add_argument("--dob", help="Date of birth in YYYY-MM-DD format (preferred over --age)")
+    parser.add_argument("--height", type=float, help="Height in centimetres (required for SMI, FFMI, FMI)")
     args = parser.parse_args()
+
+    dob = None
+    if args.dob:
+        try:
+            dob = date.fromisoformat(args.dob)
+        except ValueError:
+            print(f"Invalid --dob format '{args.dob}'. Use YYYY-MM-DD.", file=sys.stderr)
+            sys.exit(1)
+    elif args.age:
+        today = date.today()
+        dob = date(today.year - args.age, today.month, today.day)
 
     profile = UserProfile(
         sex=args.sex,
-        age=args.age,
+        dob=dob,
+        height_cm=args.height,
     )
 
     quiet = args.json_stdout
     result = run_pipeline(
         args.pdf, args.output_dir, profile,
-        quiet=quiet, stage1_only=args.stage1_only,
+        quiet=quiet, stage1_only=args.stage1_only, stage2_only=args.stage2_only,
     )
 
     if args.json_stdout:
@@ -237,10 +395,23 @@ def main():
             sys.exit(1)
 
         print(f"\n{'─' * 90}")
-        print("Stage 1 (Importing) + Stage 2 (Unifying) complete\n")
+        stages = " + ".join(result.get("stages_completed", ["importing", "unifying"]))
+        print(f"{stages} complete\n")
 
         print(f"{'Marker':<25} {'Value':>10} {'Unit':<10} {'Ref Range':<18} {'Flag':<14} {'Confidence':<10}")
         print("─" * 87)
+        _GOOD_FLAGS = {"OPTIMAL", "INFO"}
+        _GOOD_TIERS = {"healthy", "normal", "sufficient", "optimal"}
+
+        def _flag_display(flag: str) -> str:
+            if flag in _GOOD_FLAGS:
+                return flag
+            if flag.startswith("TIER:") and flag[5:] in _GOOD_TIERS:
+                return flag
+            if flag == "UNRESOLVED":
+                return flag
+            return f"*** {flag} ***"
+
         for m in result["markers"]:
             if m["marker_id"] is None:
                 continue
@@ -249,15 +420,24 @@ def main():
             unit = m["std_unit"]
             ref_lo = m["canonical_ref_low"]
             ref_hi = m["canonical_ref_high"]
-            ref = f"{ref_lo}-{ref_hi}" if ref_lo is not None and ref_hi is not None else "—"
+            tier = m.get("canonical_tier")
+            if tier:
+                ref = f"tier: {tier}"
+            elif ref_lo is not None and ref_hi is not None:
+                ref = f"{ref_lo}–{ref_hi}"
+            elif ref_lo is not None:
+                ref = f"≥{ref_lo}"
+            elif ref_hi is not None:
+                ref = f"≤{ref_hi}"
+            else:
+                ref = "—"
             flag = m["flag"]
-            flag_display = f"*** {flag} ***" if flag not in ("OPTIMAL",) else flag
             conf = m["confidence"]
-            print(f"{name:<25} {val:>10} {unit:<10} {ref:<18} {flag_display:<14} {conf:<10}")
+            print(f"{name:<25} {val:>10} {unit:<10} {ref:<22} {_flag_display(flag):<20} {conf:<10}")
 
         s = result["summary"]
         print(f"\n{s['matched']}/{s['total_extracted']} matched | "
-              f"{s['flagged']} flagged | "
+              f"{s['flagged']} concerning | "
               f"Flags: {s['flag_breakdown']}")
 
     if args.output_dir:

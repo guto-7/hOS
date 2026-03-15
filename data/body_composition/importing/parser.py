@@ -164,7 +164,179 @@ _MARKER_PATTERNS: list[tuple[str, list[str], str]] = [
         r"Target\s*Weight\s+(\d+\.?\d*)",
         r"Ideal\s*(?:Body\s*)?Weight\s+(\d+\.?\d*)",
     ], "kg"),
+
+    ("Visceral Fat Area", [
+        r"Visceral\s*Fat\s*Area\s*\(cm[²2]\)\s*(\d+\.?\d*)",
+        r"Visceral\s*Fat\s*Area\s+(\d+\.?\d*)\s*cm",
+        r"VFA\s*\(cm[²2]\)\s*(\d+\.?\d*)",
+        r"VFA\s+(\d+\.?\d*)",
+    ], "cm²"),
+
+    ("Extracellular Water", [
+        r"Extracellular\s*Water\s*\(L\)\s*(\d+\.?\d*)",
+        r"Extracellular\s*Water\s+(\d+\.?\d*)\s*L",
+        r"ECW\s*\(L\)\s*(\d+\.?\d*)",
+        r"ECW\s+(\d+\.?\d*)\s*L",
+    ], "L"),
+
+    ("Intracellular Water", [
+        r"Intracellular\s*Water\s*\(L\)\s*(\d+\.?\d*)",
+        r"Intracellular\s*Water\s+(\d+\.?\d*)\s*L",
+        r"ICW\s*\(L\)\s*(\d+\.?\d*)",
+        r"ICW\s+(\d+\.?\d*)\s*L",
+    ], "L"),
+
+    ("ECW/TBW", [
+        r"ECW/TBW\s+(\d+\.\d+)",
+        r"ECW\s*/\s*TBW\s+(\d+\.\d+)",
+        r"E/T\s+(?:Ratio\s+)?(\d+\.\d+)",
+        r"ECW\s*Ratio\s+(\d+\.\d+)",
+        r"Extracellular\s*Water\s*Ratio\s+(\d+\.\d+)",
+        # InBody: ratio value alone on the line below the header
+        r"ECW/TBW\s*\n\s*(\d+\.\d{2,3})",
+    ], "ratio"),
+
+    ("Phase Angle", [
+        r"Phase\s*Angle\s+(\d+\.?\d*)\s*[°\u00b0o]?",
+        r"PhA\s+(\d+\.?\d*)",
+        r"(?:Body\s*)?Phase\s*Angle\s*[:\-]?\s*(\d+\.?\d*)",
+        r"\bPA\b\s+(\d+\.?\d*)\s*[°\u00b0o]?",
+        # InBody: "PhA  5.5" possibly with degree in next token
+        r"PhA\s{1,20}(\d+\.\d)",
+    ], "degrees"),
+
+    # Segmental patterns for single-line formats (non-InBody or
+    # InBody models that list each limb on its own line)
+    ("Segmental Lean Left Arm", [
+        r"(?:Left\s*Arm|L\.?\s*Arm)\s+(\d+\.?\d*)\s*kg",
+        r"(?:Left\s*Arm|L\.?\s*Arm)\s+(\d+\.?\d*)(?=\s)",
+    ], "kg"),
+
+    ("Segmental Lean Right Arm", [
+        r"(?:Right\s*Arm|R\.?\s*Arm)\s+(\d+\.?\d*)\s*kg",
+        r"(?:Right\s*Arm|R\.?\s*Arm)\s+(\d+\.?\d*)(?=\s)",
+    ], "kg"),
+
+    ("Segmental Lean Left Leg", [
+        r"(?:Left\s*Leg|L\.?\s*Leg)\s+(\d+\.?\d*)\s*kg",
+        r"(?:Left\s*Leg|L\.?\s*Leg)\s+(\d+\.?\d*)(?=\s)",
+    ], "kg"),
+
+    ("Segmental Lean Right Leg", [
+        r"(?:Right\s*Leg|R\.?\s*Leg)\s+(\d+\.?\d*)\s*kg",
+        r"(?:Right\s*Leg|R\.?\s*Leg)\s+(\d+\.?\d*)(?=\s)",
+    ], "kg"),
 ]
+
+
+def _parse_inbody_segmental(text: str) -> dict[str, float]:
+    """
+    Parse InBody segmental lean mass values from the table layout.
+
+    InBody reports print the segmental analysis as a column table:
+
+        Segmental Lean Analysis
+                            Right Arm    Left Arm    Right Leg    Left Leg    Trunk
+        Body          (kg)  3.20         3.10         9.80         9.70        29.50
+
+    pdftotext -layout preserves column spacing so the column header row
+    and the value row are on separate lines. This function locates the
+    "Body" value row within the segmental section and maps values back
+    to the known column order.
+
+    Returns a dict {pdf_name: value} for each successfully parsed limb.
+    """
+    # Locate the segmental analysis section (case-insensitive)
+    section_m = re.search(
+        r"Segmental\s+Lean\s+(?:Analysis|Mass)",
+        text, re.IGNORECASE,
+    )
+    if not section_m:
+        return {}
+
+    # Work with the text from the section header onward (limit scope)
+    section = text[section_m.start(): section_m.start() + 1500]
+    lines = section.split("\n")
+
+    # Find the header line that names the limbs
+    header_idx = None
+    header_line = ""
+    for i, line in enumerate(lines):
+        if re.search(r"Right\s+Arm", line, re.IGNORECASE):
+            header_idx = i
+            header_line = line
+            break
+
+    if header_idx is None:
+        return {}
+
+    # Find the "Body" value row — the first line after the header that
+    # starts with "Body" (possibly followed by "(kg)") and contains
+    # at least 4 decimal numbers.
+    value_line = ""
+    for line in lines[header_idx + 1: header_idx + 6]:
+        if re.match(r"\s*Body\b", line, re.IGNORECASE) or (
+            not value_line and len(re.findall(r"\d+\.\d+", line)) >= 4
+        ):
+            value_line = line
+            break
+
+    if not value_line:
+        return {}
+
+    # Extract all decimal numbers from the value line in left-to-right order
+    values = [float(v) for v in re.findall(r"\d+\.\d+", value_line)]
+    if len(values) < 4:
+        return {}
+
+    # Column order is fixed for InBody: Right Arm, Left Arm, Right Leg, Left Leg
+    # (Trunk is 5th if present but we don't use it for symmetry)
+    names = [
+        "Segmental Lean Right Arm",
+        "Segmental Lean Left Arm",
+        "Segmental Lean Right Leg",
+        "Segmental Lean Left Leg",
+    ]
+
+    # Sanity check: plausible limb lean mass range (0.5–12 kg)
+    result = {}
+    for name, val in zip(names, values[:4]):
+        if 0.5 <= val <= 12.0:
+            result[name] = val
+
+    return result
+
+
+def _parse_inbody_ecw_tbw(text: str) -> float | None:
+    """
+    Parse ECW/TBW ratio from InBody body water section.
+
+    InBody prints the ratio as a small decimal (e.g. 0.380) sometimes
+    on its own line or grouped with ECW/ICW values. This function looks
+    for a plausible ratio value (0.30–0.50) near ECW/TBW context.
+    """
+    # Look for value immediately after ECW/TBW label on same or next line
+    m = re.search(
+        r"ECW\s*/\s*TBW\s*[:\-]?\s*\n?\s*(0\.\d{2,3})",
+        text, re.IGNORECASE,
+    )
+    if m:
+        val = float(m.group(1))
+        if 0.30 <= val <= 0.55:
+            return val
+
+    # Fallback: look for a standalone ratio value near ECW/TBW keywords
+    # in a window of text around the keyword
+    kw_m = re.search(r"ECW\s*/\s*TBW", text, re.IGNORECASE)
+    if kw_m:
+        window = text[kw_m.start(): kw_m.start() + 150]
+        candidates = re.findall(r"(0\.\d{2,3})", window)
+        for c in candidates:
+            val = float(c)
+            if 0.30 <= val <= 0.55:
+                return val
+
+    return None
 
 
 def parse_markers(text: str) -> ParseResult:
@@ -209,6 +381,35 @@ def parse_markers(text: str) -> ParseResult:
                 ))
                 break  # first match wins for this marker
 
+    # InBody segmental table fallback (handles column-layout format where
+    # header row and value row are on separate lines)
+    already_parsed_segmental = {m.pdf_name for m in markers if m.pdf_name.startswith("Segmental Lean ")}
+    if len(already_parsed_segmental) < 4:
+        segmental_values = _parse_inbody_segmental(text)
+        for seg_name, seg_val in segmental_values.items():
+            if seg_name not in already_parsed_segmental:
+                markers.append(RawMarker(
+                    pdf_name=seg_name,
+                    value=seg_val,
+                    unit="kg",
+                    ref_low=None,
+                    ref_high=None,
+                    raw_text=f"InBody segmental table: {seg_val} kg",
+                ))
+
+    # InBody ECW/TBW ratio fallback (handles value on separate line after label)
+    if not any(m.pdf_name == "ECW/TBW" for m in markers):
+        ecw_tbw_val = _parse_inbody_ecw_tbw(text)
+        if ecw_tbw_val is not None:
+            markers.append(RawMarker(
+                pdf_name="ECW/TBW",
+                value=ecw_tbw_val,
+                unit="ratio",
+                ref_low=None,
+                ref_high=None,
+                raw_text=f"InBody ECW/TBW: {ecw_tbw_val}",
+            ))
+
     # Compute derived markers
     weight_marker = next((m for m in markers if m.pdf_name == "Weight"), None)
     tbw_marker = next((m for m in markers if m.pdf_name == "Total Body Water"), None)
@@ -250,14 +451,10 @@ def parse_markers(text: str) -> ParseResult:
         if m.pdf_name == "Target Weight":
             m.pdf_name = "Ideal Weight"
 
-    # Filter out raw intermediates that aren't in our final marker set
-    final_names = {
-        "Weight", "Skeletal Muscle Mass", "Body Fat Mass", "BMI",
-        "Body Fat Percentage", "Visceral Fat Level", "Basal Metabolic Rate",
-        "Fat Free Mass", "Water Percentage", "Protein Percentage",
-        "Bone Mass", "Ideal Weight",
-    }
-    markers = [m for m in markers if m.pdf_name in final_names]
+    # Filter out raw intermediates (Protein, Minerals before renaming) that
+    # should not be passed downstream as standalone markers.
+    _intermediates = {"Protein", "Minerals", "Target Weight"}
+    markers = [m for m in markers if m.pdf_name not in _intermediates]
 
     return ParseResult(
         device=device,
