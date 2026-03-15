@@ -14,6 +14,7 @@ function Dashboard({ activeNodeId }: DashboardProps) {
   const historyLoadRef = useRef<((id: string) => void) | null>(null);
   const deleteRef = useRef<((id: string) => Promise<void>) | null>(null);
   const resetRef = useRef<(() => void) | null>(null);
+  const importRef = useRef<(() => void) | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const handleHistoryChange = useCallback((entries: HistoryEntry[]) => {
@@ -30,8 +31,8 @@ function Dashboard({ activeNodeId }: DashboardProps) {
     await deleteRef.current?.(id);
   }, []);
 
-  const handleUploadNew = useCallback(() => {
-    resetRef.current?.();
+  const handleImport = useCallback(() => {
+    importRef.current?.();
     setHistoryOpen(false);
   }, []);
 
@@ -66,19 +67,31 @@ function Dashboard({ activeNodeId }: DashboardProps) {
 
   return (
     <div className={styles.dashboard}>
-      {historyEntries.length > 0 && (
+      <div className={styles.toolbar}>
         <div className={styles.historyDropdown} ref={dropdownRef}>
           <button
             className={styles.historyButton}
-            onClick={() => setHistoryOpen(!historyOpen)}
+            onClick={historyEntries.length > 0 ? () => setHistoryOpen(!historyOpen) : handleImport}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-            {activeLabel ?? historyEntries.length}
+            {historyEntries.length > 0 ? (
+              <>
+                {activeLabel ?? historyEntries.length}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </>
+            ) : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                Import
+              </>
+            )}
           </button>
-          {historyOpen && (
+          {historyOpen && historyEntries.length > 0 && (
             <div className={styles.historyMenu}>
               <div className={styles.historyMenuHeader}>Past Imports</div>
               {historyEntries.map((entry) => (
@@ -102,23 +115,24 @@ function Dashboard({ activeNodeId }: DashboardProps) {
                   </button>
                 </div>
               ))}
-              <button className={styles.uploadNewBtn} onClick={handleUploadNew}>
+              <button className={styles.uploadNewBtn} onClick={handleImport}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19" />
                   <line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
-                Upload new
+                Import new
               </button>
             </div>
           )}
         </div>
-      )}
+      </div>
       <DashboardContent
         onHistoryChange={handleHistoryChange}
         onActiveLabel={setActiveLabel}
         historyRef={historyLoadRef}
         deleteRef={deleteRef}
         resetRef={resetRef}
+        importRef={importRef}
       />
     </div>
   );

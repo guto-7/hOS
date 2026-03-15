@@ -12,6 +12,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::run_hepatology,
             commands::list_hepatology,
+            commands::get_marker_catalog,
             commands::load_hepatology,
             commands::delete_hepatology,
             commands::run_orchestrator,

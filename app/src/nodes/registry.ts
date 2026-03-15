@@ -16,6 +16,7 @@ export interface NodeContentProps {
   historyRef?: React.RefObject<((id: string) => void) | null>;
   deleteRef?: React.RefObject<((id: string) => Promise<void>) | null>;
   resetRef?: React.RefObject<(() => void) | null>;
+  importRef?: React.RefObject<(() => void) | null>;
 }
 
 export interface NodeDefinition {

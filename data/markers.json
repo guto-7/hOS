@@ -6,12 +6,7 @@
     "aliases": ["IGF-1", "IGF1", "Insulin-like Growth Factor 1", "Somatomedin C"],
     "unit": "ng/mL",
     "unit_conversions": [{ "from": "nmol/L", "multiply": 7.65 }],
-    "ranges": {
-      "16-24": { "low": 182, "high": 780 },
-      "25-39": { "low": 114, "high": 492 },
-      "40-54": { "low": 90, "high": 360 },
-      "55+":   { "low": 71, "high": 290 }
-    }
+    "ranges": { "low": 114, "high": 492 }
   },
   {
     "id": "GH",
@@ -20,7 +15,7 @@
     "aliases": ["GH", "Growth Hormone", "HGH", "Somatotropin"],
     "unit": "µg/L",
     "unit_conversions": [{ "from": "ng/mL", "multiply": 1 }],
-    "ranges": { "low": null, "high": 5.0 }
+    "ranges": { "low": 0.05, "high": 5.0 }
   },
 
   {
@@ -41,7 +36,6 @@
     "unit": "mmol/L",
     "unit_conversions": [{ "from": "mEq/L", "multiply": 1 }],
     "ranges": { "low": 3.5, "high": 5.0 },
-    "pregnancy_range": { "low": 3.3, "high": 4.7 },
     "alert_thresholds": { "critical_low": 2.5, "critical_high": 6.0 }
   },
   {
@@ -61,7 +55,6 @@
     "unit": "mmol/L",
     "unit_conversions": [{ "from": "mEq/L", "multiply": 1 }],
     "ranges": { "low": 23, "high": 28 },
-    "pregnancy_range": { "low": 20, "high": 28 },
     "alert_thresholds": { "critical_low": 15, "critical_high": 45 }
   },
   {
@@ -71,8 +64,7 @@
     "aliases": ["Urea", "BUN", "Blood Urea Nitrogen"],
     "unit": "mmol/L",
     "unit_conversions": [{ "from": "mg/dL", "multiply": 0.357 }],
-    "ranges": { "low": 2.9, "high": 7.1 },
-    "pregnancy_range": { "low": 1.2, "high": 4.0 }
+    "ranges": { "low": 2.9, "high": 7.1 }
   },
   {
     "id": "Cr",
@@ -81,11 +73,7 @@
     "aliases": ["Creatinine", "Cr", "Creat"],
     "unit": "µmol/L",
     "unit_conversions": [{ "from": "mg/dL", "multiply": 88.4 }],
-    "ranges": {
-      "male":   { "low": 62, "high": 115 },
-      "female": { "low": 44, "high": 97 }
-    },
-    "pregnancy_range": { "low": 30, "high": 70 }
+    "ranges": { "low": 62, "high": 115 }
   },
   {
     "id": "eGFR",
@@ -94,7 +82,7 @@
     "aliases": ["eGFR", "Estimated GFR", "Glomerular Filtration Rate"],
     "unit": "mL/min/1.73m²",
     "unit_conversions": [],
-    "ranges": { "low": 60, "high": null },
+    "ranges": { "low": 60, "high": 120 },
     "calculated_from": ["Cr"],
     "calculation": "CKD-EPI from creatinine, age, sex"
   },
@@ -127,7 +115,6 @@
     "unit": "mmol/L",
     "unit_conversions": [{ "from": "mg/dL", "multiply": 0.323 }],
     "ranges": { "low": 0.97, "high": 1.45 },
-    "pregnancy_range": { "low": 0.75, "high": 1.40 },
     "alert_thresholds": { "critical_low": 0.30, "critical_high": null }
   },
   {
@@ -147,11 +134,7 @@
     "aliases": ["Uric Acid", "UA", "Urate"],
     "unit": "mmol/L",
     "unit_conversions": [{ "from": "mg/dL", "multiply": 0.0595 }],
-    "ranges": {
-      "male":   { "low": 0.24, "high": 0.51 },
-      "female": { "low": 0.16, "high": 0.43 }
-    },
-    "pregnancy_range": { "low": 0.12, "high": 0.35 }
+    "ranges": { "low": 0.24, "high": 0.51 }
   },
 
   {
@@ -161,8 +144,7 @@
     "aliases": ["Total Protein", "TP", "Serum Protein"],
     "unit": "g/L",
     "unit_conversions": [{ "from": "g/dL", "multiply": 10 }],
-    "ranges": { "low": 55, "high": 90 },
-    "pregnancy_range": { "low": 58, "high": 72 }
+    "ranges": { "low": 55, "high": 90 }
   },
   {
     "id": "Alb",
@@ -171,8 +153,7 @@
     "aliases": ["Albumin", "Alb"],
     "unit": "g/L",
     "unit_conversions": [{ "from": "g/dL", "multiply": 10 }],
-    "ranges": { "low": 35, "high": 55 },
-    "pregnancy_range": { "low": 30, "high": 40 }
+    "ranges": { "low": 35, "high": 55 }
   },
   {
     "id": "Glob",
@@ -181,8 +162,7 @@
     "aliases": ["Globulin", "Glob"],
     "unit": "g/L",
     "unit_conversions": [{ "from": "g/dL", "multiply": 10 }],
-    "ranges": { "low": 20, "high": 35 },
-    "pregnancy_range": { "low": 21, "high": 41 }
+    "ranges": { "low": 20, "high": 35 }
   },
   {
     "id": "ALP",
@@ -191,8 +171,7 @@
     "aliases": ["ALP", "Alkaline Phosphatase", "Alk Phos"],
     "unit": "U/L",
     "unit_conversions": [],
-    "ranges": { "low": 30, "high": 120 },
-    "pregnancy_range": { "low": 30, "high": 215 }
+    "ranges": { "low": 30, "high": 120 }
   },
   {
     "id": "TBil",
@@ -210,11 +189,7 @@
     "aliases": ["GGT", "Gamma GT", "Gamma-Glutamyl Transferase", "γ-GT"],
     "unit": "U/L",
     "unit_conversions": [],
-    "ranges": {
-      "male":   { "low": 9, "high": 50 },
-      "female": { "low": 8, "high": 40 }
-    },
-    "pregnancy_range": { "low": 5, "high": 30 }
+    "ranges": { "low": 9, "high": 50 }
   },
   {
     "id": "AST",
@@ -242,9 +217,9 @@
     "aliases": ["Total Cholesterol", "Cholesterol", "TC", "T.Chol"],
     "unit": "mmol/L",
     "unit_conversions": [{ "from": "mg/dL", "multiply": 0.0259 }],
-    "ranges": { "low": null, "high": 5.18 },
+    "ranges": { "low": 3.0, "high": 5.18 },
     "tiers": {
-      "desirable":       { "low": null, "high": 5.18 },
+      "desirable":       { "low": 3.0, "high": 5.18 },
       "borderline_high": { "low": 5.18, "high": 6.19 },
       "high":            { "low": 6.19, "high": null }
     }
@@ -256,12 +231,9 @@
     "aliases": ["HDL", "HDL Cholesterol", "HDL-C"],
     "unit": "mmol/L",
     "unit_conversions": [{ "from": "mg/dL", "multiply": 0.0259 }],
-    "ranges": {
-      "male":   { "low": 1.04, "high": null },
-      "female": { "low": 1.30, "high": null }
-    },
+    "ranges": { "low": 1.04, "high": 2.07 },
     "tiers": {
-      "optimal": { "low": 1.55, "high": null }
+      "optimal": { "low": 1.55, "high": 2.07 }
     }
   },
   {
@@ -271,9 +243,9 @@
     "aliases": ["LDL", "LDL Cholesterol", "LDL-C"],
     "unit": "mmol/L",
     "unit_conversions": [{ "from": "mg/dL", "multiply": 0.0259 }],
-    "ranges": { "low": null, "high": 4.13 },
+    "ranges": { "low": 1.0, "high": 4.13 },
     "tiers": {
-      "optimal":         { "low": null, "high": 2.59 },
+      "optimal":         { "low": 1.0, "high": 2.59 },
       "near_optimal":    { "low": 2.59, "high": 3.34 },
       "borderline_high": { "low": 3.34, "high": 4.13 },
       "high":            { "low": 4.13, "high": 4.90 },
@@ -287,7 +259,7 @@
     "aliases": ["Non-HDL", "Non-HDL Cholesterol"],
     "unit": "mmol/L",
     "unit_conversions": [{ "from": "mg/dL", "multiply": 0.0259 }],
-    "ranges": { "low": null, "high": 3.37 },
+    "ranges": { "low": 1.0, "high": 3.37 },
     "calculated_from": ["TC", "HDL"],
     "calculation": "Total Cholesterol − HDL"
   },
@@ -298,9 +270,9 @@
     "aliases": ["Triglycerides", "TG", "Trigs"],
     "unit": "mmol/L",
     "unit_conversions": [{ "from": "mg/dL", "multiply": 0.0113 }],
-    "ranges": { "low": null, "high": 1.70 },
+    "ranges": { "low": 0.45, "high": 1.70 },
     "tiers": {
-      "normal":          { "low": null, "high": 1.70 },
+      "normal":          { "low": 0.45, "high": 1.70 },
       "borderline_high": { "low": 1.70, "high": 2.25 },
       "high":            { "low": 2.26, "high": 5.64 },
       "very_high":       { "low": 5.64, "high": null }
@@ -314,7 +286,7 @@
     "aliases": ["LDL/HDL Ratio", "LDL:HDL"],
     "unit": "ratio",
     "unit_conversions": [],
-    "ranges": { "low": null, "high": 2.5 },
+    "ranges": { "low": 0.5, "high": 2.5 },
     "calculated_from": ["LDL", "HDL"],
     "calculation": "LDL ÷ HDL"
   },
@@ -325,7 +297,7 @@
     "aliases": ["Chol/HDL Ratio", "TC:HDL", "Cholesterol/HDL"],
     "unit": "ratio",
     "unit_conversions": [],
-    "ranges": { "low": null, "high": 4.0 },
+    "ranges": { "low": 1.0, "high": 4.0 },
     "calculated_from": ["TC", "HDL"],
     "calculation": "Total Cholesterol ÷ HDL"
   },
@@ -352,9 +324,9 @@
     "aliases": ["Insulin", "Fasting Insulin"],
     "unit": "mU/L",
     "unit_conversions": [{ "from": "µU/mL", "multiply": 1 }],
-    "ranges": { "low": null, "high": 20 },
+    "ranges": { "low": 2.0, "high": 20 },
     "tiers": {
-      "optimal": { "low": null, "high": 10 }
+      "optimal": { "low": 2.0, "high": 10 }
     }
   },
   {
@@ -379,9 +351,9 @@
     "aliases": ["hsCRP", "hs-CRP", "High Sensitivity CRP", "C-Reactive Protein"],
     "unit": "mg/L",
     "unit_conversions": [],
-    "ranges": { "low": null, "high": 3.0 },
+    "ranges": { "low": 0, "high": 3.0 },
     "tiers": {
-      "low_risk":     { "low": null, "high": 1.0 },
+      "low_risk":     { "low": 0, "high": 1.0 },
       "average_risk": { "low": 1.0, "high": 3.0 },
       "high_risk":    { "low": 3.0, "high": null }
     }
@@ -394,10 +366,7 @@
     "aliases": ["Total Testosterone", "Testosterone", "TT"],
     "unit": "nmol/L",
     "unit_conversions": [{ "from": "ng/dL", "multiply": 0.0347 }],
-    "ranges": {
-      "male":   { "low": 10.1, "high": 38.2 },
-      "female": { "low": 0.62, "high": 1.87 }
-    }
+    "ranges": { "low": 10.1, "high": 38.2 }
   },
   {
     "id": "SHBG",
@@ -406,10 +375,7 @@
     "aliases": ["SHBG", "Sex Hormone Binding Globulin"],
     "unit": "nmol/L",
     "unit_conversions": [],
-    "ranges": {
-      "male":   { "low": 10, "high": 57 },
-      "female": { "low": 18, "high": 144 }
-    }
+    "ranges": { "low": 10, "high": 57 }
   },
   {
     "id": "FT",
@@ -418,10 +384,7 @@
     "aliases": ["Free Testosterone", "Free Testo", "FT"],
     "unit": "pmol/L",
     "unit_conversions": [{ "from": "pg/mL", "multiply": 3.47 }],
-    "ranges": {
-      "male": { "low": 243, "high": 1041 }
-    },
-    "applicable_sex": "male"
+    "ranges": { "low": 243, "high": 1041 }
   },
 
   {
@@ -431,10 +394,7 @@
     "aliases": ["DHEA-S", "DHEAS", "Dehydroepiandrosterone Sulfate"],
     "unit": "µmol/L",
     "unit_conversions": [{ "from": "µg/dL", "multiply": 0.02714 }],
-    "ranges": {
-      "male":   { "low": 2.42, "high": 12.4 },
-      "female": { "low": 1.19, "high": 9.01 }
-    }
+    "ranges": { "low": 2.42, "high": 12.4 }
   },
 
   {
@@ -444,13 +404,7 @@
     "aliases": ["FSH", "Follicle Stimulating Hormone"],
     "unit": "IU/L",
     "unit_conversions": [],
-    "ranges": {
-      "male": { "low": 1, "high": 7 },
-      "female_follicular":     { "low": 2, "high": 9 },
-      "female_midcycle":       { "low": 4, "high": 22 },
-      "female_luteal":         { "low": 2, "high": 9 },
-      "female_postmenopause":  { "low": 30, "high": null }
-    }
+    "ranges": { "low": 1, "high": 7 }
   },
   {
     "id": "LH",
@@ -459,13 +413,7 @@
     "aliases": ["LH", "Luteinising Hormone", "Luteinizing Hormone"],
     "unit": "IU/L",
     "unit_conversions": [],
-    "ranges": {
-      "male": { "low": 2, "high": 9 },
-      "female_follicular":     { "low": 1, "high": 12 },
-      "female_midcycle":       { "low": 9, "high": 80 },
-      "female_luteal":         { "low": 1, "high": 12 },
-      "female_postmenopause":  { "low": 30, "high": null }
-    }
+    "ranges": { "low": 2, "high": 9 }
   },
   {
     "id": "E2",
@@ -474,11 +422,7 @@
     "aliases": ["Oestradiol", "Estradiol", "E2"],
     "unit": "pmol/L",
     "unit_conversions": [{ "from": "pg/mL", "multiply": 3.671 }],
-    "ranges": {
-      "male": { "low": 73, "high": 184 },
-      "female_follicular":     { "low": 37, "high": 661 },
-      "female_postmenopause":  { "low": null, "high": 37 }
-    }
+    "ranges": { "low": 73, "high": 184 }
   },
   {
     "id": "Prog",
@@ -487,11 +431,7 @@
     "aliases": ["Progesterone", "P4"],
     "unit": "nmol/L",
     "unit_conversions": [{ "from": "ng/mL", "multiply": 3.18 }],
-    "ranges": {
-      "male": { "low": 0.38, "high": 0.95 },
-      "female_follicular": { "low": 0.06, "high": 2.86 },
-      "female_luteal":     { "low": 6.36, "high": 95.4 }
-    }
+    "ranges": { "low": 0.38, "high": 0.95 }
   },
   {
     "id": "PRL",
@@ -500,7 +440,7 @@
     "aliases": ["Prolactin", "PRL"],
     "unit": "mIU/L",
     "unit_conversions": [{ "from": "ng/mL", "multiply": 21.2 }],
-    "ranges": { "low": null, "high": 420 }
+    "ranges": { "low": 50, "high": 420 }
   },
 
   {
@@ -519,8 +459,7 @@
     "aliases": ["Free T4", "FT4", "Free Thyroxine", "Thyroxine"],
     "unit": "pmol/L",
     "unit_conversions": [{ "from": "ng/dL", "multiply": 12.87 }],
-    "ranges": { "low": 10, "high": 23 },
-    "pregnancy_range": { "low": 8, "high": 16 }
+    "ranges": { "low": 10, "high": 23 }
   },
   {
     "id": "FT3",
@@ -529,8 +468,7 @@
     "aliases": ["Free T3", "FT3", "Free Triiodothyronine", "T3"],
     "unit": "pmol/L",
     "unit_conversions": [{ "from": "pg/mL", "multiply": 1.54 }],
-    "ranges": { "low": 3.5, "high": 6.5 },
-    "pregnancy_range": { "low": 3.0, "high": 5.5 }
+    "ranges": { "low": 3.5, "high": 6.5 }
   },
 
   {
@@ -587,13 +525,9 @@
     "aliases": ["Ferritin", "Ferr"],
     "unit": "µg/L",
     "unit_conversions": [{ "from": "ng/mL", "multiply": 1 }],
-    "ranges": {
-      "male":   { "low": 24, "high": 336 },
-      "female": { "low": 24, "high": 307 }
-    },
-    "pregnancy_range": { "low": 10, "high": 150 },
+    "ranges": { "low": 24, "high": 336 },
     "tiers": {
-      "optimal": { "low": 50, "high": null }
+      "optimal": { "low": 50, "high": 336 }
     }
   },
   {
@@ -640,10 +574,7 @@
     "aliases": ["RBC", "Red Blood Cells", "Red Cell Count", "Erythrocytes"],
     "unit": "x10¹²/L",
     "unit_conversions": [],
-    "ranges": {
-      "male":   { "low": 4.5, "high": 5.9 },
-      "female": { "low": 4.0, "high": 5.2 }
-    }
+    "ranges": { "low": 4.5, "high": 5.9 }
   },
   {
     "id": "Hb",
@@ -652,10 +583,7 @@
     "aliases": ["Haemoglobin", "Hemoglobin", "Hb", "HGB"],
     "unit": "g/L",
     "unit_conversions": [{ "from": "g/dL", "multiply": 10 }],
-    "ranges": {
-      "male":   { "low": 140, "high": 180 },
-      "female": { "low": 120, "high": 160 }
-    }
+    "ranges": { "low": 140, "high": 180 }
   },
   {
     "id": "Hct",
@@ -664,10 +592,7 @@
     "aliases": ["Haematocrit", "Hematocrit", "Hct", "HCT", "PCV"],
     "unit": "ratio",
     "unit_conversions": [],
-    "ranges": {
-      "male":   { "low": 0.42, "high": 0.50 },
-      "female": { "low": 0.37, "high": 0.47 }
-    }
+    "ranges": { "low": 0.42, "high": 0.50 }
   },
   {
     "id": "MCV",
@@ -713,13 +638,6 @@
     "aliases": ["PSA", "Prostate Specific Antigen"],
     "unit": "µg/L",
     "unit_conversions": [{ "from": "ng/mL", "multiply": 1 }],
-    "ranges": {
-      "<40":   { "low": null, "high": 1.4 },
-      "40-49": { "low": null, "high": 2.0 },
-      "50-59": { "low": null, "high": 3.0 },
-      "60-69": { "low": null, "high": 4.0 },
-      "70+":   { "low": null, "high": 5.0 }
-    },
-    "applicable_sex": "male"
+    "ranges": { "low": 0, "high": 4.0 }
   }
 ]

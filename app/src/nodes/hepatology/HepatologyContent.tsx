@@ -96,9 +96,18 @@ interface HistoryRecord {
   source_hash: string;
   original_name: string | null;
   collection_date: string | null;
+  produced_at: string | null;
   node_id: string;
   critical_flags_count: number;
   certainty_grade: string;
+}
+
+interface CatalogMarker {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+  ranges: { low: number; high: number };
 }
 
 type ProcessingStatus = "loading" | "idle" | "processing" | "done" | "error";
@@ -112,16 +121,88 @@ function formatRefRange(low: number | null, high: number | null): string {
   return "—";
 }
 
-function flagClass(flag: string, s: typeof styles): string {
-  if (flag === "Critical") return s.flagCritical;
-  if (flag === "High" || flag === "Low") return s.flagAbnormal;
-  return s.flagOptimal;
+type DeviationTier = "green" | "yellow" | "red";
+
+function deviationTier(d: DeviationMetric): DeviationTier {
+  if (d.deviation_fraction === null || d.deviation_fraction === undefined)
+    return "green";
+  const abs = Math.abs(d.deviation_fraction);
+  if (abs <= 0.25) return "yellow";
+  return "red";
+}
+
+const TIER_COLOR: Record<DeviationTier, string> = {
+  green: "var(--flag-optimal)",
+  yellow: "var(--flag-high)",
+  red: "var(--flag-critical-high)",
+};
+
+function deviationLabel(d: DeviationMetric): string {
+  if (d.deviation_fraction === null || d.deviation_fraction === undefined)
+    return "Normal";
+  const abs = Math.abs(d.deviation_fraction);
+  const isLow = d.deviation_fraction < 0;
+  if (abs <= 0.25) return isLow ? "Low" : "High";
+  return isLow ? "Critical Low" : "Critical High";
+}
+
+function RangeIndicator({ marker }: { marker: HepatologyMarker }) {
+  const { value, reference_low: low, reference_high: high } = marker.deviation;
+  if (low === null && high === null) return <div className={styles.rangeSlot} />;
+
+  const h = 48;
+  const w = 16;
+  const pad = 4;
+  const usable = h - pad * 2;
+
+  // Derive effective bounds for one-sided ranges
+  let refLow: number, refHigh: number;
+  if (low !== null && high !== null) {
+    refLow = low;
+    refHigh = high;
+  } else if (low !== null) {
+    const span = Math.abs(low) * 0.3 || 1;
+    refLow = low;
+    refHigh = low + span;
+  } else {
+    const span = Math.abs(high!) * 0.3 || 1;
+    refLow = high! - span;
+    refHigh = high!;
+  }
+
+  const refSpan = (refHigh - refLow) || 1;
+  const margin = refSpan * 0.15;
+  const dLow = refLow - margin;
+  const dHigh = refHigh + margin;
+
+  const toY = (v: number) =>
+    pad + usable * (1 - Math.max(0, Math.min(1, (v - dLow) / (dHigh - dLow))));
+
+  const tier = deviationTier(marker.deviation);
+  const dotColor = TIER_COLOR[tier];
+
+  return (
+    <svg width={w} height={h} className={styles.rangeIndicator}>
+      <line
+        x1={w / 2} y1={toY(refHigh)}
+        x2={w / 2} y2={toY(refLow)}
+        stroke={dotColor}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+      <circle
+        cx={w / 2}
+        cy={toY(value)}
+        r={3.5}
+        fill={dotColor}
+      />
+    </svg>
+  );
 }
 
 function scoreColor(score: number): string {
-  if (score >= 80) return "var(--flag-normal)";
-  if (score >= 60) return "var(--flag-optimal)";
-  if (score >= 40) return "var(--flag-high)";
+  if (score >= 75) return "var(--flag-optimal)";
+  if (score >= 25) return "var(--flag-high)";
   return "var(--flag-critical-high)";
 }
 
@@ -145,7 +226,7 @@ function CompositeScoreRing({ score, label }: { score: number; label: string }) 
   const radius = 28;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (score / 100) * circumference;
-  const color = scoreColor(score);
+  const color = scoreColor(Math.round(score));
 
   return (
     <div className={styles.ringContainer}>
@@ -182,7 +263,7 @@ function CompositeScoreRing({ score, label }: { score: number; label: string }) 
   );
 }
 
-function DomainSection({
+function DomainCard({
   title,
   composite,
   scores,
@@ -191,83 +272,92 @@ function DomainSection({
   composite: DomainScore | undefined;
   scores: DomainScore[];
 }) {
-  if (scores.length === 0 && !composite) return null;
-
   return (
-    <div className={styles.domainSection}>
-      <div className={styles.domainHeader}>
-        {composite && (
-          <CompositeScoreRing score={composite.score} label={title} />
-        )}
-        {!composite && <span className={styles.domainTitle}>{title}</span>}
-        {composite && (
-          <span className={styles.domainInterp}>{composite.interpretation}</span>
-        )}
-      </div>
-      <div className={styles.scoreGrid}>
-        {scores.map((s) => (
-          <div key={s.system} className={styles.scoreCard}>
-            <div className={styles.scoreCardHeader}>
-              <span className={styles.scoreSystem}>{s.system}</span>
-              <span className={styles.scoreValue}>{formatScore(s.score, s.system)}</span>
-            </div>
-            <p className={styles.scoreInterp}>{s.interpretation}</p>
-            <span className={styles.scoreVersion}>{s.version}</span>
+    <div className={styles.categoryCard}>
+      <div className={styles.categoryCardHeader}>{title}</div>
+
+      {composite && (
+        <div className={styles.compositeArea}>
+          <CompositeScoreRing score={composite.score} label="" />
+          <div className={styles.compositeDetail}>
+            <span className={styles.compositeInterp}>{composite.interpretation}</span>
+            {composite.components.length > 0 && (
+              <div className={styles.compositeBreakdown}>
+                {composite.components.map((c, i) => (
+                  <span key={i} className={styles.breakdownChip}>{c}</span>
+                ))}
+              </div>
+            )}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
+
+      {scores.length > 0 && (
+        <div className={styles.scoreGrid}>
+          {scores.map((s) => (
+            <div key={s.system} className={styles.scoreRow}>
+              <div className={styles.scoreRowHeader}>
+                <span className={styles.scoreRowName}>{s.system}</span>
+                <span className={styles.scoreRowValue}>{formatScore(s.score, s.system)}</span>
+              </div>
+              <p className={styles.scoreRowInterp}>{s.interpretation}</p>
+              {s.components.length > 0 && (
+                <span className={styles.scoreRowComponents}>
+                  {s.components.join(" \u00b7 ")}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function ConditionsPanel({ conditions }: { conditions: ConditionMatch[] }) {
-  if (conditions.length === 0) return null;
-
+function ConditionsCard({ conditions }: { conditions: ConditionMatch[] }) {
   return (
-    <div className={styles.conditionsSection}>
-      <h3 className={styles.evalSectionTitle}>Conditions Detected</h3>
-      <div className={styles.conditionsList}>
-        {conditions.map((c) => (
-          <div key={c.condition} className={styles.conditionCard}>
-            <div className={styles.conditionHeader}>
-              <span className={styles.conditionName}>{c.condition}</span>
-              <span className={`${styles.conditionCertainty} ${
-                c.certainty.grade === "High"
-                  ? styles.certaintyHigh
-                  : c.certainty.grade === "Moderate"
-                  ? styles.certaintyMod
-                  : styles.certaintyLow
-              }`}>
-                {c.certainty.grade}
-              </span>
-            </div>
-            <div className={styles.criteriaList}>
-              {c.criteria.map((cr, i) => (
-                <span key={i} className={styles.criterionChip}>
-                  {cr.met ? "\u2713" : "\u2717"} {cr.criterion}
-                  {cr.observed && (
-                    <span className={styles.criterionObs}> ({cr.observed})</span>
-                  )}
-                </span>
-              ))}
-            </div>
+    <div className={styles.categoryCard}>
+      <div className={styles.categoryCardHeader}>Conditions</div>
+      {conditions.map((c) => (
+        <div key={c.condition} className={styles.conditionRow}>
+          <div className={styles.conditionRowHeader}>
+            <span className={styles.conditionName}>{c.condition}</span>
+            <span className={`${styles.conditionCertainty} ${
+              c.certainty.grade === "High"
+                ? styles.certaintyHigh
+                : c.certainty.grade === "Moderate"
+                ? styles.certaintyMod
+                : styles.certaintyLow
+            }`}>
+              {c.certainty.grade}
+            </span>
           </div>
-        ))}
-      </div>
+          <div className={styles.criteriaList}>
+            {c.criteria.map((cr, i) => (
+              <span key={i} className={cr.met ? styles.criterionMet : styles.criterionUnmet}>
+                {cr.met ? "\u2713" : "\u2717"} {cr.criterion}
+                {cr.observed && (
+                  <span className={styles.criterionObs}> ({cr.observed})</span>
+                )}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
 
 /* ── Main Component ── */
 
-function HepatologyContent({ onHistoryChange, onActiveLabel, historyRef, deleteRef, resetRef }: NodeContentProps) {
+function HepatologyContent({ onHistoryChange, onActiveLabel, historyRef, deleteRef, resetRef, importRef }: NodeContentProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
   const [status, setStatus] = useState<ProcessingStatus>("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const [contract, setContract] = useState<OutputContract | null>(null);
   const [currentFile, setCurrentFile] = useState<string>("");
   const [history, setHistory] = useState<HistoryRecord[]>([]);
+  const [catalog, setCatalog] = useState<CatalogMarker[]>([]);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -299,9 +389,17 @@ function HepatologyContent({ onHistoryChange, onActiveLabel, historyRef, deleteR
       history.map((r) => ({
         id: r.source_hash,
         label: r.original_name ?? "Unknown",
-        detail: r.collection_date
-          ? `${r.collection_date} · ${r.critical_flags_count > 0 ? `${r.critical_flags_count} critical` : "No critical flags"}`
-          : r.critical_flags_count > 0 ? `${r.critical_flags_count} critical` : "No critical flags",
+        detail: (() => {
+          let imported = "";
+          if (r.produced_at) {
+            const d = new Date(r.produced_at);
+            if (!isNaN(d.getTime())) imported = d.toLocaleDateString();
+          }
+          const flags = r.critical_flags_count > 0
+            ? `${r.critical_flags_count} critical`
+            : "No critical flags";
+          return imported ? `${imported} · ${flags}` : flags;
+        })(),
       }))
     );
   }, [history, onHistoryChange]);
@@ -357,7 +455,22 @@ function HepatologyContent({ onHistoryChange, onActiveLabel, historyRef, deleteR
     }
   });
 
+  // Expose file picker trigger to parent
   useEffect(() => {
+    if (importRef) {
+      importRef.current = () => fileInputRef.current?.click();
+    }
+  });
+
+  useEffect(() => {
+    // Load marker catalog for empty-state rendering
+    invoke<string>("get_marker_catalog").then((json) => {
+      try {
+        const raw = JSON.parse(json) as CatalogMarker[];
+        setCatalog(raw);
+      } catch { /* ignore */ }
+    }).catch(() => {});
+
     loadHistory().then((records) => {
       if (records.length > 0) {
         const latest = records[0];
@@ -409,27 +522,6 @@ function HepatologyContent({ onHistoryChange, onActiveLabel, historyRef, deleteR
     [processFile]
   );
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragOver(false);
-      handleFiles(e.dataTransfer.files);
-    },
-    [handleFiles]
-  );
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-  }, []);
-
-  const handleClick = () => fileInputRef.current?.click();
-
   const reset = () => {
     setStatus("idle");
     setContract(null);
@@ -457,10 +549,33 @@ function HepatologyContent({ onHistoryChange, onActiveLabel, historyRef, deleteR
   const getScores = (domain: string) =>
     individualScores.filter((s) => s.domain === domain);
 
+  // Build display markers: from contract if available, otherwise from catalog
+  const displayMarkers: HepatologyMarker[] = contract
+    ? markers
+    : catalog.map((c) => ({
+        name: c.name,
+        original_name: null,
+        category: c.category,
+        value: 0,
+        unit: c.unit,
+        original_value: null,
+        original_unit: null,
+        unit_converted: false,
+        adjustment_note: null,
+        deviation: {
+          value: 0,
+          reference_low: c.ranges.low,
+          reference_high: c.ranges.high,
+          unit: c.unit,
+          flag: "Normal" as const,
+          deviation_fraction: null,
+        },
+      }));
+
   // Group markers by category
   const groupedMarkers: { category: string; markers: HepatologyMarker[] }[] = [];
   const categoryIndex = new Map<string, number>();
-  for (const m of markers) {
+  for (const m of displayMarkers) {
     const cat = m.category ?? "Other";
     const idx = categoryIndex.get(cat);
     if (idx !== undefined) {
@@ -473,48 +588,13 @@ function HepatologyContent({ onHistoryChange, onActiveLabel, historyRef, deleteR
 
   return (
     <>
-      {status === "loading" && (
-        <div className={styles.statusCard}>
-          <p className={styles.statusText}>Loading...</p>
-        </div>
-      )}
-
-      {status === "idle" && (
-        <div
-          className={`${styles.dropzone} ${isDragOver ? styles.dropzoneActive : ""}`}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onClick={handleClick}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") handleClick();
-          }}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,application/pdf"
-            className={styles.fileInput}
-            onChange={(e) => handleFiles(e.target.files)}
-          />
-          <div className={styles.dropzoneIcon}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="12" y1="18" x2="12" y2="12" />
-              <line x1="9" y1="15" x2="12" y2="12" />
-              <line x1="15" y1="15" x2="12" y2="12" />
-            </svg>
-          </div>
-          <p className={styles.dropzoneText}>
-            Drop your blood panel PDF here, or{" "}
-            <span className={styles.dropzoneLink}>browse files</span>
-          </p>
-          <p className={styles.dropzoneHint}>PDF files only</p>
-        </div>
-      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,application/pdf"
+        className={styles.fileInput}
+        onChange={(e) => handleFiles(e.target.files)}
+      />
 
       {status === "processing" && (
         <div className={styles.statusCard}>
@@ -535,7 +615,7 @@ function HepatologyContent({ onHistoryChange, onActiveLabel, historyRef, deleteR
         </div>
       )}
 
-      {status === "done" && contract && (
+      {(status === "done" || status === "idle" || status === "loading") && (
         <div className={styles.splitLayout}>
           {/* ── Top Half: Evaluation Findings ── */}
           <div className={styles.evalPanel}>
@@ -546,79 +626,82 @@ function HepatologyContent({ onHistoryChange, onActiveLabel, historyRef, deleteR
               </div>
             )}
 
-            {/* Domain composite rings */}
-            {composites.length > 0 && (
-              <div className={styles.compositeRow}>
-                {composites.map((c) => (
-                  <CompositeScoreRing key={c.system} score={c.score} label={c.domain} />
-                ))}
+            <div className={styles.evalColumns}>
+              <div className={styles.evalColumn}>
+                <DomainCard
+                  title="Longevity"
+                  composite={getComposite("Longevity")}
+                  scores={getScores("Longevity")}
+                />
+                <DomainCard
+                  title="Metabolic"
+                  composite={getComposite("Metabolic")}
+                  scores={getScores("Metabolic")}
+                />
               </div>
-            )}
-
-            {/* Conditions */}
-            <ConditionsPanel conditions={conditionMatches as ConditionMatch[]} />
-
-            {/* Domain sections */}
-            <DomainSection
-              title="Metabolic"
-              composite={getComposite("Metabolic")}
-              scores={getScores("Metabolic")}
-            />
-            <DomainSection
-              title="Longevity"
-              composite={getComposite("Longevity")}
-              scores={getScores("Longevity")}
-            />
-            <DomainSection
-              title="Hormonal"
-              composite={getComposite("Hormonal")}
-              scores={getScores("Hormonal")}
-            />
+              <div className={styles.evalColumn}>
+                <ConditionsCard conditions={conditionMatches as ConditionMatch[]} />
+                <DomainCard
+                  title="Hormonal"
+                  composite={getComposite("Hormonal")}
+                  scores={getScores("Hormonal")}
+                />
+              </div>
+            </div>
           </div>
 
-          {/* ── Bottom Half: Scrollable Markers Table ── */}
+          {/* ── Bottom Half: Scrollable Marker Widgets ── */}
           <div className={styles.markersPanel}>
             <div className={styles.markersScroll}>
-              <table className={styles.resultsTable}>
-                <thead>
-                  <tr>
-                    <th>Marker</th>
-                    <th>Value</th>
-                    <th>Unit</th>
-                    <th>Reference Range</th>
-                    <th>Flag</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {groupedMarkers.map((group) => (
-                    <>
-                      <tr key={`group-${group.category}`} className={styles.groupHeader}>
-                        <td colSpan={5}>{group.category}</td>
-                      </tr>
-                      {group.markers.map((m, i) => (
-                        <tr
-                          key={`${group.category}-${m.name}-${i}`}
-                          className={
-                            m.deviation.flag !== "Normal" ? styles.rowFlagged : ""
-                          }
-                        >
-                          <td>{m.name}</td>
-                          <td className={styles.mono}>{m.value}</td>
-                          <td className={styles.mono}>{m.unit}</td>
-                          <td className={styles.mono}>
-                            {formatRefRange(m.deviation.reference_low, m.deviation.reference_high)}
-                          </td>
-                          <td>
-                            <span className={flagClass(m.deviation.flag, styles)}>
-                              {m.deviation.flag}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </>
-                  ))}
-                </tbody>
-              </table>
+              {groupedMarkers.map((group) => (
+                <div key={group.category} className={styles.categoryCard}>
+                  <div className={styles.categoryCardHeader}>{group.category}</div>
+                  {group.markers.map((m, i) => {
+                    const hasData = !!contract;
+                    const tier = hasData ? deviationTier(m.deviation) : "green";
+                    const color = TIER_COLOR[tier];
+                    return (
+                      <div
+                        key={`${group.category}-${m.name}-${i}`}
+                        className={`${styles.markerWidget} ${hasData && tier !== "green" ? styles.markerWidgetFlagged : ""}`}
+                        title={`${m.name}${hasData ? `: ${m.value} ${m.unit}` : ""} (ref: ${formatRefRange(m.deviation.reference_low, m.deviation.reference_high)})`}
+                      >
+                        <div className={styles.markerInfo}>
+                          <span className={styles.markerName}>{m.name}</span>
+                        </div>
+                        <div className={styles.markerStatus}>
+                          {hasData && (
+                            <>
+                              <span
+                                className={styles.statusDot}
+                                style={{ backgroundColor: color }}
+                              />
+                              <span className={styles.statusLabel} style={{ color }}>
+                                {deviationLabel(m.deviation)}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                        <div className={styles.markerValue}>
+                          {hasData && (
+                            <>
+                              <span className={styles.valueNumber}>{m.value}</span>
+                              <span className={styles.valueUnit}>{m.unit}</span>
+                            </>
+                          )}
+                          {!hasData && (
+                            <span className={styles.valueUnit}>{m.unit}</span>
+                          )}
+                        </div>
+                        <span className={styles.markerRefRange}>
+                          {formatRefRange(m.deviation.reference_low, m.deviation.reference_high)}
+                        </span>
+                        <RangeIndicator marker={m} />
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           </div>
         </div>

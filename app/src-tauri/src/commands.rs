@@ -65,6 +65,7 @@ pub async fn list_hepatology() -> Result<String, String> {
                 "source_hash": contract.metadata.source_hash,
                 "original_name": contract.metadata.original_name,
                 "collection_date": contract.collection_date,
+                "produced_at": contract.produced_at,
                 "node_id": contract.node_id,
                 "schema_version": contract.schema_version,
                 "critical_flags_count": contract.evaluation.critical_flags.len(),
@@ -74,6 +75,13 @@ pub async fn list_hepatology() -> Result<String, String> {
     }
 
     serde_json::to_string(&summaries).map_err(|e| e.to_string())
+}
+
+/// Return the marker catalog (markers.json) for rendering empty marker shells.
+#[tauri::command]
+pub async fn get_marker_catalog() -> Result<String, String> {
+    let path = util::find_script("markers.json")?;
+    fs::read_to_string(&path).map_err(|e| format!("Failed to read markers.json: {e}"))
 }
 
 /// Load a specific hepatology result by source hash.
