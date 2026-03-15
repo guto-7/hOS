@@ -260,7 +260,7 @@ def run_pipeline(
 
     if not quiet:
         print("[Stage 3] Running clinical evaluation...", file=sys.stderr)
-    eval_result = evaluate(flagged_dicts)
+    eval_result = evaluate(flagged_dicts, chronological_age=profile.age, sex=profile.sex)
 
     def _domain_to_dict(d):
         return {
@@ -284,6 +284,8 @@ def run_pipeline(
     evaluation_dict = {
         "body_score": eval_result.body_score,
         "body_score_label": eval_result.body_score_label,
+        "body_age": eval_result.body_age,
+        "chronological_age": eval_result.chronological_age,
         "domain_scores": [_domain_to_dict(d) for d in eval_result.domain_scores],
         "phenotype": {
             "id": eval_result.phenotype.id,

@@ -10,7 +10,11 @@
     "unit_conversions": [
       { "from": "lbs", "multiply": 0.4536 },
       { "from": "lb", "multiply": 0.4536 }
-    ]
+    ],
+    "ranges": {
+      "male": { "low": 60.0, "high": 90.0 },
+      "female": { "low": 45.0, "high": 75.0 }
+    }
   },
   {
     "id": "SMM",
@@ -23,7 +27,11 @@
     "unit": "kg",
     "unit_conversions": [
       { "from": "lbs", "multiply": 0.4536 }
-    ]
+    ],
+    "ranges": {
+      "male": { "low": 33.0, "high": 45.0 },
+      "female": { "low": 22.0, "high": 32.0 }
+    }
   },
   {
     "id": "BFM",
@@ -39,7 +47,11 @@
     "unit": "kg",
     "unit_conversions": [
       { "from": "lbs", "multiply": 0.4536 }
-    ]
+    ],
+    "ranges": {
+      "male": { "low": 5.0, "high": 18.0 },
+      "female": { "low": 10.0, "high": 25.0 }
+    }
   },
   {
     "id": "BMI",
@@ -189,7 +201,11 @@
     "computed_from": "370 + (21.6 * FFM_kg)",
     "aliases": [],
     "unit": "kcal",
-    "unit_conversions": []
+    "unit_conversions": [],
+    "ranges": {
+      "male": { "low": 1500, "high": 2100 },
+      "female": { "low": 1200, "high": 1700 }
+    }
   },
   {
     "id": "FFM",
@@ -202,7 +218,11 @@
     "unit": "kg",
     "unit_conversions": [
       { "from": "lbs", "multiply": 0.4536 }
-    ]
+    ],
+    "ranges": {
+      "male": { "low": 55.0, "high": 80.0 },
+      "female": { "low": 38.0, "high": 58.0 }
+    }
   },
   {
     "id": "WaterPct",
@@ -233,7 +253,11 @@
     "available_from": ["InBody"],
     "aliases": ["Protein Percentage", "Protein %", "Body Protein %"],
     "unit": "%",
-    "unit_conversions": []
+    "unit_conversions": [],
+    "ranges": {
+      "male": { "low": 14.0, "high": 18.0 },
+      "female": { "low": 12.0, "high": 16.0 }
+    }
   },
   {
     "id": "BoneMass",
@@ -259,7 +283,11 @@
     "unit": "kg",
     "unit_conversions": [
       { "from": "lbs", "multiply": 0.4536 }
-    ]
+    ],
+    "ranges": {
+      "male": { "low": 60.0, "high": 85.0 },
+      "female": { "low": 45.0, "high": 70.0 }
+    }
   },
   {
     "id": "ECW_TBW",
@@ -313,7 +341,11 @@
     "derives": ["ECW_TBW"],
     "aliases": ["Total Body Water", "TBW", "Gesamtkörperwasser"],
     "unit": "L",
-    "unit_conversions": []
+    "unit_conversions": [],
+    "ranges": {
+      "male": { "low": 36.0, "high": 56.0 },
+      "female": { "low": 26.0, "high": 44.0 }
+    }
   },
   {
     "id": "ECW",

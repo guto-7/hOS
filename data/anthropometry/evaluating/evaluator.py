@@ -57,6 +57,8 @@ class EvaluationResult:
     missing_for_full_eval: list[str]
     body_score: float                # 0–100 headline composite score
     body_score_label: str            # "Optimal" | "Good" | "Needs Attention" | "At Risk"
+    body_age: int | None             # Estimated biological age (None if chronological age unknown)
+    chronological_age: int | None    # User's actual age (passed in for reference)
 
 
 # ---------------------------------------------------------------------------
@@ -704,10 +706,66 @@ def _compute_body_score(domain_scores: list[DomainScore], phenotype: Phenotype |
 
 
 # ---------------------------------------------------------------------------
+# Body Age
+# ---------------------------------------------------------------------------
+
+# Ideal reference values for body age calculation (male defaults; female overrides below)
+_IDEAL_PBF = {"male": 15.0, "female": 23.0}
+_IDEAL_SMM_RATIO = 0.45  # SMM / Weight
+_IDEAL_VFL = 5
+
+
+def _compute_body_age(
+    markers_by_id: dict,
+    chronological_age: int | None,
+    sex: str | None,
+) -> int | None:
+    """
+    Estimate biological age from body composition relative to chronological age.
+
+    Formula:
+      body_age = chronological_age
+                 + (PBF - ideal_PBF) × 0.5           # fat penalty/bonus
+                 + (ideal_SMM_ratio - SMM_ratio) × 20 # muscle penalty/bonus
+                 + (VFL - ideal_VFL) × 0.3             # visceral fat penalty/bonus
+
+    Returns None if chronological age is unknown.
+    """
+    if chronological_age is None:
+        return None
+
+    sex_key = (sex or "male").lower()
+    ideal_pbf = _IDEAL_PBF.get(sex_key, 15.0)
+
+    adjustment = 0.0
+
+    # PBF component
+    pbf_val = _get_value(markers_by_id, "PBF")
+    if pbf_val is not None:
+        adjustment += (pbf_val - ideal_pbf) * 0.5
+
+    # SMM/Weight ratio component
+    smm_val = _get_value(markers_by_id, "SMM")
+    weight_val = _get_value(markers_by_id, "Weight")
+    if smm_val is not None and weight_val is not None and weight_val > 0:
+        smm_ratio = smm_val / weight_val
+        adjustment += (_IDEAL_SMM_RATIO - smm_ratio) * 20
+
+    # Visceral fat level component
+    vfl_val = _get_value(markers_by_id, "VFL")
+    if vfl_val is not None:
+        adjustment += (vfl_val - _IDEAL_VFL) * 0.3
+
+    body_age = round(chronological_age + adjustment)
+    # Clamp to reasonable range
+    return max(18, min(chronological_age + 20, body_age))
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
-def evaluate(flagged_markers: list[dict]) -> EvaluationResult:
+def evaluate(flagged_markers: list[dict], chronological_age: int | None = None, sex: str | None = None) -> EvaluationResult:
     """
     Run Stage 3 evaluation on a list of flagged marker dicts (from Stage 2 output).
 
@@ -758,6 +816,9 @@ def evaluate(flagged_markers: list[dict]) -> EvaluationResult:
     # Headline Body Score
     body_score, body_score_label = _compute_body_score(domain_scores, phenotype)
 
+    # Body Age
+    body_age = _compute_body_age(markers_by_id, chronological_age, sex)
+
     return EvaluationResult(
         domain_scores=domain_scores,
         phenotype=phenotype,
@@ -767,4 +828,6 @@ def evaluate(flagged_markers: list[dict]) -> EvaluationResult:
         missing_for_full_eval=missing,
         body_score=body_score,
         body_score_label=body_score_label,
+        body_age=body_age,
+        chronological_age=chronological_age,
     )

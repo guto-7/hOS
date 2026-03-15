@@ -105,7 +105,10 @@ def _compute_flag(
         return critical_label
 
     if evaluation_type in ("informational", "derived_input"):
-        return "INFO"
+        # Only return INFO if no range was resolved; otherwise fall through
+        # to standard range comparison so out-of-range values get flagged.
+        if ref_low is None and ref_high is None and canonical_tier is None:
+            return "INFO"
 
     if canonical_tier is not None:
         return f"TIER:{canonical_tier}"

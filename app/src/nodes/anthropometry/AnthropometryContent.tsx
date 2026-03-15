@@ -58,6 +58,8 @@ interface PythonSignal {
 interface PythonEvaluation {
   body_score: number;
   body_score_label: "Optimal" | "Good" | "Needs Attention" | "At Risk";
+  body_age: number | null;
+  chronological_age: number | null;
   domain_scores: PythonDomainScore[];
   phenotype: PythonPhenotype | null;
   signals: PythonSignal[];
@@ -121,52 +123,19 @@ interface HistoryRecord {
 
 type ProcessingStatus = "loading" | "idle" | "processing" | "done" | "error";
 
-/* ── Tier display ── */
+/* ── Simplified flag system: Normal or Out of Range ── */
 
-const TIER_DISPLAY: Record<string, [string, string]> = {
-  underfat:              ["Low Body Fat",           "yellow"],
-  healthy:               ["Healthy",               "green"],
-  overfat:               ["Elevated Body Fat",      "orange"],
-  obese:                 ["Obese",                 "red"],
-  normal:                ["Normal",                "green"],
-  sufficient:            ["Sufficient",            "green"],
-  optimal:               ["Optimal",               "green"],
-  symmetric:             ["Symmetric",             "green"],
-  asymmetric:            ["Asymmetric",            "orange"],
-  elevated:              ["Elevated",              "orange"],
-  high_risk:             ["High Risk",             "red"],
-  mild_imbalance:        ["Mild Imbalance",        "yellow"],
-  significant_imbalance: ["Significant Imbalance", "red"],
-  low:                   ["Low",                   "orange"],
-  critically_low:        ["Critically Low",        "red"],
-  high:                  ["High",                  "blue"],
-  physiological_ceiling: ["Above Natural Ceiling", "red"],
-  underweight:           ["Underweight",           "yellow"],
-  overweight:            ["Overweight",            "orange"],
-};
-
-const COLOR_CLASS: Record<string, string> = {
-  green:  styles.flagGreen,
-  yellow: styles.flagYellow,
-  orange: styles.flagOrange,
-  red:    styles.flagRed,
-  blue:   styles.flagBlue,
-  grey:   styles.flagGrey,
-};
+function isInRange(m: AnthropometryMarker): boolean {
+  const { reference_low, reference_high } = m.deviation;
+  const val = m.value;
+  // Simple: if value is outside the reference range, it's out of range
+  if (reference_low !== null && val < reference_low) return false;
+  if (reference_high !== null && val > reference_high) return false;
+  return true;
+}
 
 function getFlagDisplay(m: AnthropometryMarker): [string, string] {
-  const { flag } = m.deviation;
-  if (flag === "Critical") return ["Critical", "red"];
-  if (m.canonical_tier) {
-    return TIER_DISPLAY[m.canonical_tier] ?? [
-      m.canonical_tier.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-      "grey",
-    ];
-  }
-  if (flag === "Low")    return ["Low",    "orange"];
-  if (flag === "High")   return ["High",   "orange"];
-  if (flag === "Normal") return ["Normal", "green"];
-  return ["—", "grey"];
+  return isInRange(m) ? ["Normal", "green"] : ["Out of Range", "orange"];
 }
 
 function getRangeDisplay(m: AnthropometryMarker): string {
@@ -186,13 +155,7 @@ function hasResolvedRange(m: AnthropometryMarker): boolean {
 }
 
 function isConcerning(m: AnthropometryMarker): boolean {
-  const { flag } = m.deviation;
-  if (flag === "Critical" || flag === "Low" || flag === "High") return true;
-  if (m.canonical_tier) {
-    const [, color] = TIER_DISPLAY[m.canonical_tier] ?? ["", "grey"];
-    return color === "red" || color === "orange" || color === "yellow";
-  }
-  return false;
+  return !isInRange(m);
 }
 
 /* ── Bucketing ── */
@@ -245,40 +208,6 @@ function groupByCategory(markers: AnthropometryMarker[]): [string, Anthropometry
   return ordered;
 }
 
-/* ── Domain score helpers ── */
-
-const GRADE_COLOR: Record<string, string> = {
-  // Legacy grade strings
-  optimal:    styles.flagGreen,
-  good:       styles.flagGreen,
-  borderline: styles.flagYellow,
-  poor:       styles.flagOrange,
-  critical:   styles.flagRed,
-  // New status labels (adiposity, muscularity, fluid health, metabolic health)
-  Optimal:                    styles.flagGreen,
-  Normal:                     styles.flagGreen,
-  Good:                       styles.flagGreen,
-  Moderate:                   styles.flagYellow,
-  "Below Average":            styles.flagYellow,
-  "Asymmetry Detected":       styles.flagYellow,
-  "Cellular Health Concern":  styles.flagYellow,
-  Low:                        styles.flagOrange,
-  Elevated:                   styles.flagOrange,
-  Suppressed:                 styles.flagOrange,
-  "Mild Imbalance":           styles.flagOrange,
-  "High Risk":                styles.flagRed,
-  "Critically Low":           styles.flagRed,
-  "Significant Imbalance":    styles.flagRed,
-  "Above Natural Ceiling":    styles.flagRed,
-  Critical:                   styles.flagRed,
-};
-
-const SEVERITY_COLOR: Record<string, string> = {
-  info:    styles.flagBlue,
-  warning: styles.flagYellow,
-  concern: styles.flagOrange,
-};
-
 /* ── Component ── */
 
 function AnthropometryContent({ onHistoryChange, onActiveLabel, historyRef, deleteRef, resetRef }: NodeContentProps) {
@@ -289,6 +218,9 @@ function AnthropometryContent({ onHistoryChange, onActiveLabel, historyRef, dele
   const [contract, setContract] = useState<OutputContract | null>(null);
   const [currentFile, setCurrentFile] = useState<string>("");
   const [history, setHistory] = useState<HistoryRecord[]>([]);
+
+  // Trend data — marker values across all history records, keyed by marker name
+  const [trendData, setTrendData] = useState<Record<string, { date: string; value: number }[]>>({});
 
   // Profile state — optional; passed to pipeline for demographic adjustment
   const [profileSex, setProfileSex] = useState<"" | "male" | "female">("");
@@ -390,11 +322,33 @@ function AnthropometryContent({ onHistoryChange, onActiveLabel, historyRef, dele
     }
   });
 
+  // Load trend data from all history records
+  const loadTrends = useCallback(async (records: HistoryRecord[]) => {
+    const trends: Record<string, { date: string; value: number }[]> = {};
+    for (const r of records) {
+      try {
+        const json = await invoke<string>("load_anthropometry", { sourceHash: r.source_hash });
+        const parsed: OutputContract = JSON.parse(json);
+        const date = parsed.collection_date ?? parsed.produced_at ?? "";
+        for (const m of parsed.unified_data.markers) {
+          if (!trends[m.name]) trends[m.name] = [];
+          trends[m.name].push({ date, value: m.value });
+        }
+      } catch { /* skip failed loads */ }
+    }
+    // Sort each marker's data by date
+    for (const key of Object.keys(trends)) {
+      trends[key].sort((a, b) => a.date.localeCompare(b.date));
+    }
+    setTrendData(trends);
+  }, []);
+
   useEffect(() => {
     loadHistory().then((records) => {
       if (records.length > 0) {
         const latest = records[0];
         loadResult(latest.source_hash, latest.original_name ?? "Unknown");
+        loadTrends(records);
       } else {
         setStatus("idle");
       }
@@ -427,7 +381,8 @@ function AnthropometryContent({ onHistoryChange, onActiveLabel, historyRef, dele
       const parsed: OutputContract = JSON.parse(jsonString);
       setContract(parsed);
       setStatus("done");
-      loadHistory();
+      const records = await loadHistory();
+      loadTrends(records);
     } catch (err) {
       setErrorMsg(String(err));
       setStatus("error");
@@ -587,192 +542,292 @@ function AnthropometryContent({ onHistoryChange, onActiveLabel, historyRef, dele
         </div>
       )}
 
-      {status === "done" && contract && (
-        <>
-          {criticalFlags.length > 0 && (
-            <div className={styles.warningBanner}>
-              <strong>{criticalFlags.length} critical flag{criticalFlags.length > 1 ? "s" : ""}:</strong>
-              {" "}{criticalFlags.join(", ")}
-            </div>
-          )}
+      {status === "done" && contract && (() => {
+        // Format date string (e.g. "13.12.2024" or "2024-12-13") to "Dec 2024"
+        const fmtDate = (d: string): string => {
+          // Try dd.mm.yyyy
+          const dotMatch = d.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+          if (dotMatch) {
+            const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+            return `${months[parseInt(dotMatch[2], 10) - 1]} ${dotMatch[3]}`;
+          }
+          // Try yyyy-mm-dd
+          const isoMatch = d.match(/^(\d{4})-(\d{2})/);
+          if (isoMatch) {
+            const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+            return `${months[parseInt(isoMatch[2], 10) - 1]} ${isoMatch[1]}`;
+          }
+          return d.slice(0, 10);
+        };
 
-          {/* Stage 3 — Body Score headline */}
-          {pyEval && pyEval.body_score != null && (
-            <div className={styles.bodyScoreBar}>
-              <div className={styles.bodyScoreContent}>
-                <span className={styles.bodyScoreTitle}>Body Score</span>
-                <div className={styles.bodyScoreLeft}>
-                  <span className={styles.bodyScoreNum}>{pyEval.body_score}</span>
-                  <span className={styles.bodyScoreSlash}> / 100</span>
-                  <span className={`${styles.bodyScoreLabel} ${
-                    pyEval.body_score >= 85 ? styles.flagGreen :
-                    pyEval.body_score >= 70 ? styles.flagGreen :
-                    pyEval.body_score >= 50 ? styles.flagOrange :
-                    styles.flagRed
-                  }`}>
-                    {pyEval.body_score_label}
-                  </span>
-                </div>
+        // Sparkline renderer with date/value labels
+        const Sparkline = ({ points }: { points: { date: string; value: number }[] }) => {
+          if (points.length < 2) return <span className={styles.trendEmpty}>—</span>;
+          const vals = points.map((p) => p.value);
+          const min = Math.min(...vals);
+          const max = Math.max(...vals);
+          const range = max - min || 1;
+          const w = 160;
+          const h = 48;
+          const padX = 8;
+          const padTop = 12;
+          const padBot = 12;
+          const chartH = h - padTop - padBot;
+
+          const coords = vals.map((v, i) => ({
+            x: padX + (i / (vals.length - 1)) * (w - padX * 2),
+            y: padTop + chartH - ((v - min) / range) * chartH,
+          }));
+          const polyPts = coords.map((c) => `${c.x},${c.y}`).join(" ");
+          const trending = vals[vals.length - 1] > vals[0] ? "up" : vals[vals.length - 1] < vals[0] ? "down" : "flat";
+          const color = trending === "up" ? "var(--flag-optimal)" : trending === "down" ? "var(--flag-high)" : "var(--text-muted)";
+
+          return (
+            <svg viewBox={`0 0 ${w} ${h}`} className={styles.sparkline}>
+              <polyline
+                points={polyPts}
+                fill="none"
+                stroke={color}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              {points.map((p, i) => (
+                <g key={i}>
+                  <circle cx={coords[i].x} cy={coords[i].y} r="3" fill={color}>
+                    <title>{`${fmtDate(p.date)}: ${p.value}`}</title>
+                  </circle>
+                  <text
+                    x={coords[i].x}
+                    y={coords[i].y - 5}
+                    textAnchor="middle"
+                    className={styles.sparklineLabel}
+                  >
+                    {p.value}
+                  </text>
+                  <text
+                    x={coords[i].x}
+                    y={h - 1}
+                    textAnchor="middle"
+                    className={styles.sparklineDate}
+                  >
+                    {fmtDate(p.date)}
+                  </text>
+                </g>
+              ))}
+            </svg>
+          );
+        };
+
+        // Combine evaluated + raw for full marker table
+        const allDisplayMarkers = [...evaluated, ...raw];
+
+        return (
+          <>
+            {criticalFlags.length > 0 && (
+              <div className={styles.warningBanner}>
+                <strong>{criticalFlags.length} critical flag{criticalFlags.length > 1 ? "s" : ""}:</strong>
+                {" "}{criticalFlags.join(", ")}
               </div>
-              {pyEval.certainty_grade === "low" || pyEval.certainty_grade === "insufficient" ? (
-                <span className={styles.bodyScoreCaveat}>Limited data</span>
-              ) : null}
-            </div>
-          )}
+            )}
 
-          {/* Stage 3 — Domain score cards */}
-          {pyEval && pyEval.domain_scores.length > 0 && (
-            <div className={styles.domainGrid}>
-              {pyEval.domain_scores.map((d) => (
-                <div key={d.domain} className={styles.domainCard}>
-                  <div className={styles.domainCardHeader}>
-                    <span className={styles.domainLabel}>{d.label}</span>
-                    <span className={`${styles.domainGrade} ${GRADE_COLOR[d.grade] ?? styles.flagGrey}`}>
-                      {d.grade}
-                    </span>
-                  </div>
-                  {d.notes.length > 0 && (
-                    <ul className={styles.domainNotes}>
-                      {d.notes.slice(0, 3).map((n, i) => (
-                        <li key={i} className={styles.domainNote}>{n}</li>
-                      ))}
-                    </ul>
+            {/* ── Top section: Body Score + Body Age ────────── */}
+            {pyEval && (
+              <div className={styles.topGrid}>
+                {/* Body Score gauge */}
+                <div className={styles.scorePanel}>
+                  <p className={styles.panelLabel}>Body Score</p>
+                  {(() => {
+                    const pct = pyEval.body_score;
+                    const radius = 54;
+                    const stroke = 10;
+                    const circumference = 2 * Math.PI * radius;
+                    const filled = (pct / 100) * circumference;
+                    const gap = circumference - filled;
+                    const scoreColor = pct >= 85
+                      ? "var(--flag-optimal)"
+                      : pct >= 70
+                        ? "var(--flag-normal)"
+                        : pct >= 50
+                          ? "var(--flag-high)"
+                          : "var(--flag-critical-high)";
+
+                    return (
+                      <div className={styles.gaugeContainer}>
+                        <svg viewBox="0 0 128 128" className={styles.gaugeSvg}>
+                          <circle
+                            cx="64" cy="64" r={radius}
+                            fill="none"
+                            stroke="var(--bg-surface-raised)"
+                            strokeWidth={stroke}
+                          />
+                          <circle
+                            cx="64" cy="64" r={radius}
+                            fill="none"
+                            stroke={scoreColor}
+                            strokeWidth={stroke}
+                            strokeDasharray={`${filled} ${gap}`}
+                            strokeDashoffset={circumference * 0.25}
+                            strokeLinecap="round"
+                          />
+                          <text x="64" y="58" textAnchor="middle" className={styles.gaugeValue}>
+                            {pct}
+                          </text>
+                          <text x="64" y="74" textAnchor="middle" className={styles.gaugeSubtext}>
+                            / 100
+                          </text>
+                        </svg>
+                        <span className={`${styles.gaugeLabel} ${
+                          pct >= 70 ? styles.flagGreen : pct >= 50 ? styles.flagOrange : styles.flagRed
+                        }`}>
+                          {pyEval.body_score_label}
+                        </span>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Body Age */}
+                <div className={styles.agePanel}>
+                  <p className={styles.panelLabel}>Body Age</p>
+                  {pyEval.body_age != null ? (
+                    <div className={styles.ageContainer}>
+                      <span className={styles.ageValue}>{pyEval.body_age}</span>
+                      <span className={styles.ageUnit}>years</span>
+                      {pyEval.chronological_age != null && (
+                        <span className={`${styles.ageDelta} ${
+                          pyEval.body_age < pyEval.chronological_age
+                            ? styles.flagGreen
+                            : pyEval.body_age > pyEval.chronological_age
+                              ? styles.flagOrange
+                              : styles.flagGrey
+                        }`}>
+                          {pyEval.body_age < pyEval.chronological_age
+                            ? `${pyEval.chronological_age - pyEval.body_age}y younger`
+                            : pyEval.body_age > pyEval.chronological_age
+                              ? `${pyEval.body_age - pyEval.chronological_age}y older`
+                              : "Matches actual age"}
+                        </span>
+                      )}
+                      {pyEval.chronological_age != null && (
+                        <span className={styles.ageActual}>
+                          Actual age: {pyEval.chronological_age}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <p className={styles.ageUnavailable}>
+                      Provide age in profile to calculate body age.
+                    </p>
                   )}
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* Stage 3 — Phenotype */}
-          {pyEval?.phenotype && (
-            <div className={styles.phenotypeCard}>
-              <div className={styles.phenotypeHeader}>
-                <span className={styles.phenotypeLabel}>{pyEval.phenotype.label}</span>
-                <span className={`${styles.phenotypeConfidence} ${
-                  pyEval.phenotype.confidence === "high" ? styles.flagOrange :
-                  pyEval.phenotype.confidence === "moderate" ? styles.flagYellow :
-                  styles.flagGrey
-                }`}>
-                  {pyEval.phenotype.confidence} confidence
-                </span>
               </div>
-              <p className={styles.phenotypeDescription}>{pyEval.phenotype.description}</p>
-              {pyEval.phenotype.contributing_signals.length > 0 && (
-                <div className={styles.phenotypeSignals}>
-                  {pyEval.phenotype.contributing_signals.map((s) => (
-                    <span key={s} className={styles.phenotypeSignalTag}>{s}</span>
+            )}
+
+            {/* ── Marker table with trends ──────────────────── */}
+            {allDisplayMarkers.length > 0 && (
+              <table className={styles.resultsTable}>
+                <thead>
+                  <tr>
+                    <th>Marker</th>
+                    <th>Value</th>
+                    <th>Unit</th>
+                    <th>Reference Range</th>
+                    <th>Flag</th>
+                    <th>Trend</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {grouped.map(([category, categoryMarkers]) => (
+                    <>
+                      <tr key={`cat-${category}`} className={styles.categoryRow}>
+                        <td colSpan={6} className={styles.categoryHeader}>{category}</td>
+                      </tr>
+                      {categoryMarkers.map((m, i) => {
+                        const [flagLabel, flagColor] = getFlagDisplay(m);
+                        const trend = trendData[m.name] ?? [];
+                        return (
+                          <tr
+                            key={`${m.name}-${i}`}
+                            className={isConcerning(m) ? styles.rowFlagged : ""}
+                          >
+                            <td>
+                              <span className={styles.markerName}>{m.name}</span>
+                              {m.is_derived && (
+                                <span className={styles.derivedBadge}>computed</span>
+                              )}
+                            </td>
+                            <td className={styles.mono}>{m.value}</td>
+                            <td className={styles.mono}>{m.unit}</td>
+                            <td className={styles.mono} title={m.adjustment_note ?? undefined}>
+                              {getRangeDisplay(m)}
+                              {m.adjustment_note && (
+                                <span className={styles.adjustmentDot} title={m.adjustment_note}>·</span>
+                              )}
+                            </td>
+                            <td>
+                              <span className={flagColor === "green" ? styles.flagGreen : styles.flagOrange}>
+                                {flagLabel}
+                              </span>
+                            </td>
+                            <td>
+                              <Sparkline points={trend} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </>
+                  ))}
+                  {/* Raw measurements */}
+                  {raw.length > 0 && (
+                    <>
+                      <tr className={styles.categoryRow}>
+                        <td colSpan={6} className={styles.categoryHeader}>Raw Measurements</td>
+                      </tr>
+                      {raw.map((m, i) => {
+                        const hasRange = m.deviation.reference_low !== null || m.deviation.reference_high !== null;
+                        const [flagLabel, flagColor] = hasRange ? getFlagDisplay(m) : ["—", "grey"];
+                        const trend = trendData[m.name] ?? [];
+                        return (
+                          <tr key={`raw-${m.name}-${i}`}>
+                            <td><span className={styles.markerName}>{m.name}</span></td>
+                            <td className={styles.mono}>{m.value}</td>
+                            <td className={styles.mono}>{m.unit}</td>
+                            <td className={styles.mono}>{hasRange ? getRangeDisplay(m) : "—"}</td>
+                            <td>
+                              <span className={flagColor === "green" ? styles.flagGreen : flagColor === "orange" ? styles.flagOrange : styles.flagGrey}>
+                                {flagLabel}
+                              </span>
+                            </td>
+                            <td><Sparkline points={trend} /></td>
+                          </tr>
+                        );
+                      })}
+                    </>
+                  )}
+                </tbody>
+              </table>
+            )}
+
+            {/* Unresolved — needs patient context */}
+            {unresolved.length > 0 && (
+              <div className={styles.unresolvedSection}>
+                <p className={styles.unresolvedTitle}>
+                  {unresolved.length} metric{unresolved.length > 1 ? "s" : ""} could not be evaluated
+                </p>
+                <p className={styles.unresolvedHint}>
+                  Age, sex, or height is required to resolve reference ranges.
+                </p>
+                <div className={styles.unresolvedList}>
+                  {unresolved.map((m) => (
+                    <span key={m.name} className={styles.unresolvedItem}>{m.name}</span>
                   ))}
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* Stage 3 — Signals */}
-          {pyEval && pyEval.signals.length > 0 && (
-            <div className={styles.signalsList}>
-              {pyEval.signals.map((s) => (
-                <div key={s.id} className={`${styles.signalItem} ${styles[`signal_${s.severity}`]}`}>
-                  <div className={styles.signalHeader}>
-                    <span className={`${styles.signalLabel} ${SEVERITY_COLOR[s.severity] ?? styles.flagGrey}`}>
-                      {s.label}
-                    </span>
-                    <span className={styles.signalSeverity}>{s.severity}</span>
-                  </div>
-                  <p className={styles.signalDetail}>{s.detail}</p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Main evaluated table */}
-          {evaluated.length > 0 && (
-            <table className={styles.resultsTable}>
-              <thead>
-                <tr>
-                  <th>Marker</th>
-                  <th>Value</th>
-                  <th>Unit</th>
-                  <th>Reference Range</th>
-                  <th>Flag</th>
-                </tr>
-              </thead>
-              <tbody>
-                {grouped.map(([category, categoryMarkers]) => (
-                  <>
-                    <tr key={`cat-${category}`} className={styles.categoryRow}>
-                      <td colSpan={5} className={styles.categoryHeader}>{category}</td>
-                    </tr>
-                    {categoryMarkers.map((m, i) => {
-                      const [flagLabel, flagColor] = getFlagDisplay(m);
-                      return (
-                        <tr
-                          key={`${m.name}-${i}`}
-                          className={isConcerning(m) ? styles.rowFlagged : ""}
-                        >
-                          <td>
-                            <span className={styles.markerName}>{m.name}</span>
-                            {m.is_derived && (
-                              <span className={styles.derivedBadge}>computed</span>
-                            )}
-                          </td>
-                          <td className={styles.mono}>{m.value}</td>
-                          <td className={styles.mono}>{m.unit}</td>
-                          <td
-                            className={styles.mono}
-                            title={m.adjustment_note ?? undefined}
-                          >
-                            {getRangeDisplay(m)}
-                            {m.adjustment_note && (
-                              <span className={styles.adjustmentDot} title={m.adjustment_note}>·</span>
-                            )}
-                          </td>
-                          <td>
-                            <span className={COLOR_CLASS[flagColor] ?? styles.flagGrey}>
-                              {flagLabel}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {/* Unresolved — needs patient context */}
-          {unresolved.length > 0 && (
-            <div className={styles.unresolvedSection}>
-              <p className={styles.unresolvedTitle}>
-                {unresolved.length} metric{unresolved.length > 1 ? "s" : ""} could not be evaluated
-              </p>
-              <p className={styles.unresolvedHint}>
-                Age, sex, or height is required to resolve reference ranges for these metrics.
-              </p>
-              <div className={styles.unresolvedList}>
-                {unresolved.map((m) => (
-                  <span key={m.name} className={styles.unresolvedItem}>{m.name}</span>
-                ))}
               </div>
-            </div>
-          )}
-
-          {/* Raw measurements — always visible */}
-          {raw.length > 0 && (
-            <div className={styles.rawSection}>
-              <p className={styles.rawSectionTitle}>Raw Measurements</p>
-              <div className={styles.rawGrid}>
-                {raw.map((m) => (
-                  <div key={m.name} className={styles.rawItem}>
-                    <span className={styles.rawName}>{m.name}</span>
-                    <span className={styles.rawValue}>{m.value} {m.unit}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
-      )}
+            )}
+          </>
+        );
+      })()}
     </>
   );
 }

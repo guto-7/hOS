@@ -151,19 +151,22 @@ def _has_tier_structure(d: dict) -> bool:
     )
 
 
+_NORMAL_TIER_NAMES = {"normal", "healthy", "optimal", "sufficient", "symmetric"}
+
+
 def _resolve_tier(
     tier_dict: dict,
     value: float,
 ) -> tuple[str | None, float | None, float | None]:
     """
-    Given a dict of named tiers, return (tier_name, tier_low, tier_high)
+    Given a dict of named tiers, return (tier_name, ref_low, ref_high)
     for the tier the value falls in.
 
-    A tier matches when:
-      value >= tier["low"]  (if present)
-      value <  tier["high"] (if present)
-    The last tier (e.g. "obese") typically has only "low".
+    ref_low/ref_high are always the **normal/healthy tier's** bounds
+    (i.e. the ideal reference range) rather than the matched tier's bounds.
+    This way the UI shows the target range, not where the value landed.
     """
+    matched_tier = None
     for tier_name, bounds in tier_dict.items():
         if not isinstance(bounds, dict):
             continue
@@ -172,9 +175,26 @@ def _resolve_tier(
         above_low = (low is None) or (value >= low)
         below_high = (high is None) or (value <= high)
         if above_low and below_high:
-            return tier_name, low, high
+            matched_tier = tier_name
+            break
 
-    return None, None, None
+    # Find the normal/healthy tier's bounds for the reference range display
+    ref_low, ref_high = None, None
+    for tier_name, bounds in tier_dict.items():
+        if not isinstance(bounds, dict):
+            continue
+        if tier_name in _NORMAL_TIER_NAMES:
+            ref_low = bounds.get("low")
+            ref_high = bounds.get("high")
+            break
+
+    # If no normal tier found, fall back to matched tier's bounds
+    if ref_low is None and ref_high is None and matched_tier is not None:
+        matched_bounds = tier_dict.get(matched_tier, {})
+        ref_low = matched_bounds.get("low")
+        ref_high = matched_bounds.get("high")
+
+    return matched_tier, ref_low, ref_high
 
 
 # ---------------------------------------------------------------------------
@@ -509,8 +529,8 @@ def resolve_ranges(
             evaluation_type = marker_def.get("evaluation")
             available_from = marker_def.get("available_from", [])
 
-            # Step 2 — skip range resolution for non-direct metrics
-            if evaluation_type in ("derived_input", "informational"):
+            # Step 2 — skip range resolution for non-direct metrics UNLESS they have ranges defined
+            if evaluation_type in ("derived_input", "informational") and not marker_def.get("ranges"):
                 ranged.append(RangedMarker(
                     pdf_name=m.pdf_name,
                     marker_id=m.marker_id,
