@@ -210,7 +210,7 @@ function groupByCategory(markers: AnthropometryMarker[]): [string, Anthropometry
 
 /* ── Component ── */
 
-function AnthropometryContent({ onHistoryChange, onActiveLabel, historyRef, deleteRef, resetRef }: NodeContentProps) {
+function AnthropometryContent({ onHistoryChange, onActiveLabel, historyRef, deleteRef, resetRef, importRef }: NodeContentProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [status, setStatus] = useState<ProcessingStatus>("loading");
@@ -319,6 +319,16 @@ function AnthropometryContent({ onHistoryChange, onActiveLabel, historyRef, dele
   useEffect(() => {
     if (resetRef) {
       resetRef.current = reset;
+    }
+  });
+
+  // Expose import trigger to parent via ref
+  useEffect(() => {
+    if (importRef) {
+      importRef.current = () => {
+        reset();
+        fileInputRef.current?.click();
+      };
     }
   });
 
