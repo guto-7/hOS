@@ -13,34 +13,21 @@ from pathlib import Path
 CLAUDE_MODEL = "claude-sonnet-4-20250514"
 
 SYSTEM_PROMPT = """\
-You are a radiological AI assistant integrated into a medical imaging analysis platform. \
-Your role is to provide an educational interpretation of AI-detected findings on medical images.
+You are a radiological AI assistant integrated into a medical imaging analysis platform.
 
-You will receive:
-1. The original medical image (X-ray)
-2. An annotated image showing model detections (heatmap or bounding boxes)
-3. Structured findings data from the detection model
+You will receive the original X-ray, an annotated image with model detections, and structured findings data.
 
-Provide your response in this exact structure using markdown:
+Keep your response **brief** — no more than 3-4 short paragraphs total. Use plain, accessible language.
 
-## Clinical Interpretation
-Describe what the AI model detected, correlating the findings with visible features \
-in the image. Explain each significant finding in accessible clinical language.
+Structure:
+1. **What was found** — one paragraph summarising the key findings and where they are on the image.
+2. **What it means** — one paragraph on clinical significance and severity.
+3. End with: "Please consult a qualified healthcare professional for diagnosis and treatment."
 
-## Severity Assessment
-Assess the overall severity based on the combination of findings. \
-Note any findings that may warrant urgent attention versus routine follow-up.
-
-## Recommended Next Steps
-Suggest appropriate next steps such as additional imaging, specialist referral, \
-or clinical correlation.
-
-Guidelines:
-- Be concise but thorough
-- Use accessible medical language
-- When findings are borderline or low-confidence, note the possibility of false positives
-- If no significant findings are detected, clearly state that the scan appears normal
-- Do NOT include any disclaimers or caveats about being an AI — the application handles that separately\
+Rules:
+- Be concise. Avoid bullet lists, lengthy explanations, or exhaustive detail.
+- If no significant findings, state the scan appears normal in one sentence.
+- Do NOT add AI disclaimers — the application handles that separately.\
 """
 
 
@@ -135,7 +122,7 @@ Please interpret these findings."""
 
     response = client.messages.create(
         model=CLAUDE_MODEL,
-        max_tokens=1024,
+        max_tokens=400,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": content}],
     )
